@@ -4,12 +4,12 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use embassy_net::StackResources;
-use esp_backtrace as _;
 use alloc::format;
 use embassy_executor::Spawner;
 use embassy_net::Runner;
+use embassy_net::StackResources;
 use embassy_time::{Duration, Timer};
+use esp_backtrace as _;
 use esp_hal::efuse::Efuse;
 use esp_hal::{
     clock::CpuClock,
@@ -48,7 +48,6 @@ use mender_mcu_client::{
 
 mod custom;
 mod global_variables;
-
 
 const WIFI_SSID: &'static str = "Your SSID";
 const WIFI_PSK: &'static str = "Your PSK";
