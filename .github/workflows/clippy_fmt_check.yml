@@ -1,0 +1,37 @@
+on: [push, pull_request]
+
+name: CI
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rustup
+        run: |
+          sudo apt-get update
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "export PATH=\$HOME/.cargo/bin:\$PATH:/usr/bin" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Setup Rust Environment
+        run: |
+          rustup component add rustfmt
+          rustup component add clippy
+          sudo apt-get install build-essential
+          sudo apt-get install -y libudev-dev
+          sudo apt install pkg-config
+          cargo update
+          export PATH=$(pwd)/aarch64-linux-musl-cross/bin:$PATH
+        shell: bash
+
+      - name: Rustfmt
+        run: cargo fmt --all -- --check
+        continue-on-error: false
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+        continue-on-error: false
