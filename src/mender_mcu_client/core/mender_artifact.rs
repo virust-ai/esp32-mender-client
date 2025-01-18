@@ -5,11 +5,7 @@ use crate::{
 };
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
-use alloc::boxed::Box;
 use alloc::format;
-use alloc::string::ToString;
-use core::future::Future;
-use core::pin::Pin;
 use heapless::{String as HString, Vec as HVec};
 use serde::Deserialize;
 

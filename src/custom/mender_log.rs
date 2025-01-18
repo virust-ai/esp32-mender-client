@@ -1,5 +1,5 @@
 use alloc::format;
-use log::{self, Level};
+use log;
 
 /// Define log levels
 pub const MENDER_LOG_LEVEL_ERR: u8 = 1;

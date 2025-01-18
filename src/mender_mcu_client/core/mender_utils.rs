@@ -3,7 +3,6 @@ extern crate alloc;
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 use core::fmt;
 use core::fmt::Write;
 use heapless::{FnvIndexMap, String as HeaplessString};

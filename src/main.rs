@@ -11,12 +11,7 @@ use embassy_net::StackResources;
 use embassy_time::{Duration, Timer};
 use esp_backtrace as _;
 use esp_hal::efuse::Efuse;
-use esp_hal::{
-    clock::CpuClock,
-    rng::Trng,
-    timer::timg::TimerGroup,
-    twai::{self, TwaiMode},
-};
+use esp_hal::{clock::CpuClock, rng::Trng, timer::timg::TimerGroup};
 use esp_println::println;
 use esp_wifi::{
     init,
