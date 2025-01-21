@@ -102,6 +102,7 @@ pub struct HeaderInfo {
 #[derive(Debug, serde::Deserialize)]
 pub struct PayloadInfo {
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     pub payload_type: HString<MAX_STRING_SIZE>,
 }
 

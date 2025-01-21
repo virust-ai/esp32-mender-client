@@ -264,6 +264,7 @@ fn mender_tls_pem_write_buffer(der_data: &[u8]) -> MenderResult<String> {
     Ok(pem)
 }
 
+#[allow(dead_code)]
 fn mender_tls_pem_write_buffer_with_headers(
     der_data: &[u8],
     pem_header: &str,
@@ -282,7 +283,7 @@ fn mender_tls_pem_write_buffer_with_headers(
 
     // Pre-calculate capacity for the full PEM
     let line_length = 64;
-    let num_lines = (b64_data.len() + line_length - 1) / line_length;
+    let num_lines = b64_data.len().div_ceil(line_length);
     let capacity = pem_header.len() + 1 + // BEGIN line + newline
         pem_footer.len() + 1 + // END line + newline
         b64_data.len() +
@@ -309,6 +310,7 @@ fn mender_tls_pem_write_buffer_with_headers(
     Ok(pem)
 }
 
+#[allow(dead_code)]
 pub async fn mender_tls_exit() -> MenderResult<()> {
     *PRIVATE_KEY.lock().await = None;
     *PUBLIC_KEY.lock().await = None;

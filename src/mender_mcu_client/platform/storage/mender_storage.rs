@@ -181,6 +181,7 @@ pub async fn mender_storage_delete_deployment_data() -> MenderResult<()> {
     }
 }
 
+#[allow(dead_code)]
 pub async fn mender_storage_exit() -> MenderResult<()> {
     let mut storage = MENDER_STORAGE.lock().await;
     *storage = None;

@@ -21,12 +21,14 @@ pub struct MenderAddonInstance<C: 'static, CB: 'static> {
 }
 
 pub trait MenderAddon: Send + Sync {
+    #[allow(dead_code)]
     fn init(
         &self,
         config: Option<&'static ()>,
         callbacks: Option<&'static ()>,
     ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
     fn activate(&self) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
+    #[allow(dead_code)]
     fn deactivate(&self) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
     fn exit(&self) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
 }

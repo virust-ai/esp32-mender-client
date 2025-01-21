@@ -494,6 +494,7 @@ pub enum HttpMethod {
     Get,
     Post,
     Put,
+    #[allow(dead_code)]
     Patch,
 }
 

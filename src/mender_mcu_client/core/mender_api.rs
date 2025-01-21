@@ -135,6 +135,7 @@ fn mender_api_print_response_error(response: Option<&str>, status: i32) {
     }
 }
 
+#[allow(dead_code)]
 pub async fn mender_api_exit() {
     let mut conf = MENDER_API_CONFIG.lock().await;
     *conf = None;

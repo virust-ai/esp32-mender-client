@@ -71,16 +71,19 @@ impl MenderClientConfig {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_host(mut self, host: &str) -> Self {
         self.host = host.to_string();
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_auth_interval(mut self, interval: i32) -> Self {
         self.authentication_poll_interval = interval;
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_update_interval(mut self, interval: i32) -> Self {
         self.update_poll_interval = interval;
         self
@@ -124,9 +127,9 @@ impl MenderClientCallbacks {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MenderClientState {
-    MenderClientStateInitialization, // Perform initialization
-    MenderClientStateAuthentication, // Perform authentication with the server
-    MenderClientStateAuthenticated,  // Perform updates
+    Initialization, // Perform initialization
+    Authentication, // Perform authentication with the server
+    Authenticated,  // Perform updates
 }
 
 static MENDER_CLIENT_NETWORK_COUNT: Mutex<CriticalSectionRawMutex, u8> = Mutex::new(0);
@@ -139,7 +142,7 @@ static MENDER_CLIENT_CALLBACKS: Mutex<CriticalSectionRawMutex, Option<MenderClie
 
 // Static client state
 static MENDER_CLIENT_STATE: Mutex<CriticalSectionRawMutex, MenderClientState> =
-    Mutex::new(MenderClientState::MenderClientStateInitialization);
+    Mutex::new(MenderClientState::Initialization);
 
 // Add this with other static variables at the top
 static MENDER_CLIENT_WORK: Mutex<CriticalSectionRawMutex, Option<MenderSchedulerWorkContext>> =
@@ -194,9 +197,11 @@ static MENDER_CLIENT_ARTIFACT_TYPES: Mutex<
     Option<HVec<ArtifactTypeHandler, MAX_JSON_ARRAY_SIZE>>,
 > = Mutex::new(None);
 
+#[allow(dead_code)]
 pub struct CryptoRng<'a>(Trng<'a>);
 
 impl<'a> CryptoRng<'a> {
+    #[allow(dead_code)]
     pub fn new(rng: Trng<'a>) -> Self {
         CryptoRng(rng)
     }
@@ -287,11 +292,12 @@ pub async fn mender_client_init(
         Some(token) if !token.is_empty() => Some(token.to_string()),
         _ => {
             // If no token provided or empty, use default
-            if !CONFIG_MENDER_SERVER_TENANT_TOKEN.is_empty() {
-                Some(CONFIG_MENDER_SERVER_TENANT_TOKEN.to_string())
-            } else {
-                None
-            }
+            // if !CONFIG_MENDER_SERVER_TENANT_TOKEN.is_empty() {
+            //     Some(CONFIG_MENDER_SERVER_TENANT_TOKEN.to_string())
+            // } else {
+            //     None
+            // }
+            Some(CONFIG_MENDER_SERVER_TENANT_TOKEN.to_string())
         }
     };
 
@@ -448,7 +454,7 @@ pub async fn mender_client_register_addon<C: 'static, CB: 'static>(
 
     // Activate add-on if authentication is already done
     let state = MENDER_CLIENT_STATE.lock().await;
-    if *state == MenderClientState::MenderClientStateAuthenticated {
+    if *state == MenderClientState::Authenticated {
         if let Err(e) = addon.activate().await {
             log_error!("Unable to activate add-on");
             // Cleanup on failure
@@ -483,6 +489,7 @@ pub async fn mender_client_activate() -> MenderError {
     }
 }
 
+#[allow(dead_code)]
 async fn deactivate_addons() -> MenderResult<()> {
     let addons = MENDER_CLIENT_ADDONS.lock().await;
 
@@ -497,6 +504,7 @@ async fn deactivate_addons() -> MenderResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn mender_client_deactivate() -> MenderError {
     // Deactivate add-ons
     if let Err(e) = deactivate_addons().await {
@@ -556,6 +564,7 @@ pub async fn mender_client_network_release() -> MenderResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn release_addons() -> MenderResult<()> {
     let mut addons = MENDER_CLIENT_ADDONS.lock().await;
 
@@ -573,6 +582,7 @@ async fn release_addons() -> MenderResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn mender_client_exit() -> MenderError {
     // Release add-ons
     if let Err(e) = release_addons().await {
@@ -613,12 +623,12 @@ async fn mender_client_work_function() -> MenderError {
     log_info!("mender_client_work_function");
 
     let mut state = MENDER_CLIENT_STATE.lock().await;
-    if *state == MenderClientState::MenderClientStateInitialization {
+    if *state == MenderClientState::Initialization {
         // Perform initialization of the client
         match mender_client_initialization_work_function().await {
             Ok(_) => {
                 // Update client state
-                *state = MenderClientState::MenderClientStateAuthentication;
+                *state = MenderClientState::Authentication;
             }
             Err(e) => return e,
         }
@@ -630,7 +640,7 @@ async fn mender_client_work_function() -> MenderError {
     }
 
     // Intentional pass-through
-    if *state == MenderClientState::MenderClientStateAuthentication {
+    if *state == MenderClientState::Authentication {
         // Perform authentication with the server
         if let Err(e) = mender_client_authentication_work_function().await {
             return e;
@@ -659,11 +669,11 @@ async fn mender_client_work_function() -> MenderError {
 
         log_info!("mender_client_work_function: setting work period done");
         // Update client state
-        *state = MenderClientState::MenderClientStateAuthenticated;
+        *state = MenderClientState::Authenticated;
     }
 
     /* Intentional pass-through */
-    if *state == MenderClientState::MenderClientStateAuthenticated {
+    if *state == MenderClientState::Authenticated {
         // Perform updates
         mender_client_update_work_function().await
     } else {
@@ -1002,7 +1012,7 @@ async fn mender_client_authentication_work_function() -> MenderResult<()> {
     // Invoke authentication success callback
     let callbacks = MENDER_CLIENT_CALLBACKS.lock().await;
     if let Some(cb) = callbacks.as_ref() {
-        if let Err(_) = (cb.authentication_success)() {
+        if (cb.authentication_success)().is_err() {
             // Check if deployment is pending
             let deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
             if deployment.is_some() {
