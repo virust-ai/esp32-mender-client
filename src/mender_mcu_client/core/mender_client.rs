@@ -342,13 +342,14 @@ pub async fn mender_client_init(
         .expect("Failed to init mender api");
 
     // Use the static FLASH_CALLBACK instead of creating a new instance
-    if let Err(_) = mender_client_register_artifact_type(
+    if mender_client_register_artifact_type(
         "rootfs-image",
         &FLASH_CALLBACK,
         true,
         &saved_config.artifact_name,
     )
     .await
+    .is_err()
     {
         log_error!("Unable to register 'rootfs-image' artifact type");
         return Err(MenderError::Other);
@@ -1006,9 +1007,7 @@ async fn mender_client_authentication_work_function() -> MenderResult<()> {
             let deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
             if deployment.is_some() {
                 log_error!("Authentication success callback failed, rebooting");
-                if let Err(e) = (cb.restart)() {
-                    return Err(e);
-                }
+                (cb.restart)()?
             }
         }
     }
@@ -1028,10 +1027,10 @@ async fn mender_client_authentication_work_function() -> MenderResult<()> {
         if let Some(type_list) = artifact_types.as_ref() {
             for deployment_type in types.iter() {
                 for artifact_type in type_list.iter() {
-                    if artifact_type.type_name == *deployment_type {
-                        if artifact_type.artifact_name != *artifact_name {
-                            success = false;
-                        }
+                    if artifact_type.type_name == *deployment_type
+                        && artifact_type.artifact_name != *artifact_name
+                    {
+                        success = false;
                     }
                 }
             }

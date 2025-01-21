@@ -448,7 +448,7 @@ fn build_header_request(
         request.push_str("Content-Type: application/json\r\n");
         request.push_str(&format!("Content-Length: {}\r\n", payload.unwrap().len()));
     } else {
-        request.push_str(&"Content-Length: 0\r\n".to_string());
+        request.push_str("Content-Length: 0\r\n");
     }
 
     request.push_str("\r\n");

@@ -244,7 +244,10 @@ pub async fn mender_configure_set(configuration: &KeyStore) -> MenderResult<()> 
         };
 
         // Save to storage
-        if let Err(_) = mender_storage::mender_storage_set_device_config(&device_config).await {
+        if mender_storage::mender_storage_set_device_config(&device_config)
+            .await
+            .is_err()
+        {
             log_error!("Unable to record configuration");
             return Err(MenderError::Failed);
         }

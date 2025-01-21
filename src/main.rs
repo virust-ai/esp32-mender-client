@@ -37,15 +37,15 @@ use mender_mcu_client::{
     core::mender_client,
     platform::scheduler::mender_scheduler::{
         mender_scheduler_work_activate, mender_scheduler_work_create,
-        mender_scheduler_work_deactivate, mender_scheduler_work_set_period, MenderFuture,
+        mender_scheduler_work_set_period, MenderFuture,
     },
 };
 
 mod custom;
 mod global_variables;
 
-const WIFI_SSID: &'static str = "Your SSID";
-const WIFI_PSK: &'static str = "Your PSK";
+const WIFI_SSID: &str = "Your SSID";
+const WIFI_PSK: &str = "Your PSK";
 
 macro_rules! mk_static {
     ($t:ty,$val:expr) => {{
@@ -81,7 +81,7 @@ fn authentication_failure_cb() -> MenderResult<()> {
     Ok(())
 }
 
-fn deployment_status_cb(status: DeploymentStatus, message: Option<&str>) -> MenderResult<()> {
+fn deployment_status_cb(_status: DeploymentStatus, _message: Option<&str>) -> MenderResult<()> {
     log_info!("deployment_status_cb");
     // Implementation
     Ok(())

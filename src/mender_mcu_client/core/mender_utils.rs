@@ -69,7 +69,7 @@ impl KeyStore {
         KeyStore { items: HVec::new() }
     }
 
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn with_capacity(_capacity: usize) -> Self {
         KeyStore {
             items: HVec::<KeyStoreItem, MAX_STRING_SIZE>::new(),
         }
