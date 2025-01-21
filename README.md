@@ -3,6 +3,7 @@
 A **pure Rust** implementation of the Mender client for the ESP32 platform, designed for secure and reliable over-the-air (OTA) firmware updates. This project combines the performance and safety of Rust with the robustness of [Mender.io](https://mender.io/), bringing modern OTA solutions to embedded IoT devices.
 
 It is build and test on esp32-c6 for now.
+![image](https://github.com/user-attachments/assets/b33603c2-42bd-4634-ac8f-c4ab864c722e)
 
 ---
 
