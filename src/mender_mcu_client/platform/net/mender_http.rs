@@ -285,7 +285,7 @@ pub async fn mender_http_perform<'a>(
 
     //log::info!("headers {:?}", headers);
 
-    if let Err(_) = tls_conn.write_all(headers.as_bytes()).await {
+    if tls_conn.write_all(headers.as_bytes()).await.is_err() {
         log_error!("Unable to write request");
         callback
             .call(HttpClientEvent::Error, None, Some(response_data), params)
@@ -294,7 +294,7 @@ pub async fn mender_http_perform<'a>(
     }
 
     if let Some(p) = payload {
-        if let Err(_) = tls_conn.write_all(p.as_bytes()).await {
+        if tls_conn.write_all(p.as_bytes()).await.is_err() {
             log_error!("Unable to write request");
             callback
                 .call(HttpClientEvent::Error, None, Some(response_data), params)
@@ -448,7 +448,7 @@ fn build_header_request(
         request.push_str("Content-Type: application/json\r\n");
         request.push_str(&format!("Content-Length: {}\r\n", payload.unwrap().len()));
     } else {
-        request.push_str(&format!("Content-Length: 0\r\n"));
+        request.push_str(&"Content-Length: 0\r\n".to_string());
     }
 
     request.push_str("\r\n");

@@ -326,13 +326,13 @@ pub async fn mender_client_init(
     // Initialize the scheduler
     mender_scheduler_init(*spawner).expect("Failed to init scheduler");
 
-    if let Err(_) = mender_storage::mender_storage_init().await {
+    if mender_storage::mender_storage_init().await.is_err() {
         log_error!("Unable to initialize storage");
         return Err(MenderError::Other);
     }
 
     // Initialize TLS
-    if let Err(_) = mender_tls::mender_tls_init().await {
+    if mender_tls::mender_tls_init().await.is_err() {
         log_error!("Unable to initialize TLS");
         return Err(MenderError::Other);
     }
@@ -591,12 +591,15 @@ pub async fn mender_client_exit() -> MenderError {
 
     /* Release all modules */
     mender_api::mender_api_exit().await;
-    if let Err(_) = mender_tls::mender_tls_exit().await {
+    if mender_tls::mender_tls_exit().await.is_err() {
         log_error!("Unable to exit TLS");
         return MenderError::Failed;
     }
     let _ = mender_storage::mender_storage_exit().await;
-    if let Err(_) = mender_scheduler::mender_scheduler_work_delete_all().await {
+    if mender_scheduler::mender_scheduler_work_delete_all()
+        .await
+        .is_err()
+    {
         log_error!("Failed to delete all scheduler work");
         return MenderError::Failed;
     }
@@ -644,7 +647,9 @@ async fn mender_client_work_function() -> MenderError {
 
         if let Some(mut w) = work_context {
             log_info!("mender_client_work_function: setting work period", "period" => period);
-            if let Err(_) = mender_scheduler::mender_scheduler_work_set_period(&mut w, period).await
+            if mender_scheduler::mender_scheduler_work_set_period(&mut w, period)
+                .await
+                .is_err()
             {
                 log_error!("Unable to set work period");
                 return MenderError::Other;
@@ -683,7 +688,7 @@ async fn mender_client_initialization_work_function() -> MenderResult<()> {
     let mut lock = MENDER_CLIENT_RNG.lock().await;
     let rng = lock.as_mut().ok_or(MenderError::Failed)?;
 
-    mender_tls::mender_tls_init_authentication_keys(&mut rng.get_trng(), recommissioning).await?;
+    mender_tls::mender_tls_init_authentication_keys(rng.get_trng(), recommissioning).await?;
 
     // Retrieve deployment data if it exists
     match mender_storage::mender_storage_get_deployment_data().await {
@@ -980,15 +985,13 @@ async fn mender_client_authentication_work_function() -> MenderResult<()> {
         // Invoke authentication error callback
         let callbacks = MENDER_CLIENT_CALLBACKS.lock().await;
         if let Some(cb) = callbacks.as_ref() {
-            if let Err(_) = (cb.authentication_failure)() {
+            if (cb.authentication_failure)().is_err() {
                 // Check if deployment is pending
                 let deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
                 if deployment.is_some() {
                     log_error!("Authentication error callback failed, rebooting");
                     // Invoke restart callback
-                    if let Err(e) = (cb.restart)() {
-                        return Err(e);
-                    }
+                    (cb.restart)()?
                 }
             }
         }
