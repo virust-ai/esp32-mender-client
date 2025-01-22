@@ -8,7 +8,6 @@ use core::result::Result;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
-use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Instant, Timer};
 use esp_println::println;
 use heapless::{String, Vec};
@@ -46,6 +45,7 @@ pub struct MenderSchedulerWorkContext {
 pub enum SchedulerCommand {
     AddWork(MenderSchedulerWorkContext),
     RemoveWork(String<MAX_NAME_LENGTH>),
+    #[allow(dead_code)]
     RemoveAllWorks,
     SetPeriod(String<MAX_NAME_LENGTH>, i32), // Just name and period
 }
@@ -164,6 +164,7 @@ impl MenderSchedulerWorkContext {
     }
 
     /// Set the period for periodic execution
+    #[allow(dead_code)]
     async fn set_period(&mut self, period: i32) -> MenderError {
         //let _lock = WORK_STATUS_MUTEX.lock().await;
         self.params.period = period;
@@ -221,6 +222,7 @@ impl Scheduler {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn delete_all_works(&self) -> Result<(), &'static str> {
         println!("Removing all scheduled works");
         self.work_queue.send(SchedulerCommand::RemoveAllWorks).await;
@@ -360,6 +362,7 @@ pub async fn mender_scheduler_work_delete(
 }
 
 /// Delete all works
+#[allow(dead_code)]
 pub async fn mender_scheduler_work_delete_all() -> Result<(), &'static str> {
     log_info!("mender_scheduler_work_delete_all");
     SCHEDULER.delete_all_works().await

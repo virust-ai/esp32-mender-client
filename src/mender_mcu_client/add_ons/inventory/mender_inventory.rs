@@ -129,6 +129,7 @@ pub async fn mender_inventory_set(inventory: &KeyStore) -> MenderResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn mender_inventory_execute() -> MenderResult<()> {
     let mut work_handle = MENDER_INVENTORY_WORK_HANDLE.lock().await;
     if let Some(handle) = work_handle.as_mut() {
@@ -184,7 +185,7 @@ async fn mender_inventory_work_function() -> MenderResult<()> {
     let device_type = mender_client::mender_client_get_device_type().await;
 
     // Convert KeyStore to slice if present
-    let inventory_slice = keystore.as_ref().map(|k| core::slice::from_ref(k));
+    let inventory_slice = keystore.as_ref().map(core::slice::from_ref);
 
     // Publish inventory
     if mender_inventory_api::mender_inventory_api_publish_inventory_data(

@@ -14,32 +14,45 @@ use embassy_sync::mutex::Mutex;
 use heapless::FnvIndexMap;
 
 // Constants
+#[allow(dead_code)]
 const CONFIG_MENDER_CLIENT_CONFIGURE_REFRESH_INTERVAL: u64 = 28800;
 
+#[allow(dead_code)]
 pub struct MenderConfigureConfig {
     pub refresh_interval: u64,
 }
 
+#[allow(dead_code)]
 pub struct MenderConfigureCallbacks {
     pub config_updated: Option<fn(&KeyStore)>,
 }
 
+#[allow(dead_code)]
 // Global static variables
 static MENDER_CONFIGURE_CONFIG: Mutex<CriticalSectionRawMutex, Option<MenderConfigureConfig>> =
     Mutex::new(None);
+
+#[allow(dead_code)]
 static MENDER_CONFIGURE_CALLBACKS: Mutex<
     CriticalSectionRawMutex,
     Option<MenderConfigureCallbacks>,
 > = Mutex::new(None);
+
+#[allow(dead_code)]
 static MENDER_CONFIGURE_KEYSTORE: Mutex<CriticalSectionRawMutex, Option<KeyStore>> =
     Mutex::new(None);
+
+#[allow(dead_code)]
 static MENDER_CONFIGURE_ARTIFACT_NAME: Mutex<CriticalSectionRawMutex, Option<String>> =
     Mutex::new(None);
+
+#[allow(dead_code)]
 static MENDER_CONFIGURE_WORK_HANDLE: Mutex<
     CriticalSectionRawMutex,
     Option<MenderSchedulerWorkContext>,
 > = Mutex::new(None);
 
+#[allow(dead_code)]
 pub async fn mender_configure_init(
     config: Option<&MenderConfigureConfig>,
     callbacks: Option<&MenderConfigureCallbacks>,
@@ -154,6 +167,7 @@ async fn mender_configure_work_function() -> MenderResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn mender_configure_activate() -> MenderResult<()> {
     let mut work_handle = MENDER_CONFIGURE_WORK_HANDLE.lock().await;
     if let Some(handle) = work_handle.as_mut() {
@@ -168,6 +182,7 @@ pub async fn mender_configure_activate() -> MenderResult<()> {
     }
 }
 
+#[allow(dead_code)]
 pub async fn mender_configure_deactivate() -> MenderResult<()> {
     let mut work_handle = MENDER_CONFIGURE_WORK_HANDLE.lock().await;
     if let Some(handle) = work_handle.as_mut() {
@@ -181,6 +196,7 @@ pub async fn mender_configure_deactivate() -> MenderResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn mender_configure_execute() -> MenderResult<()> {
     let mut work_handle = MENDER_CONFIGURE_WORK_HANDLE.lock().await;
     if let Some(handle) = work_handle.as_mut() {
@@ -195,6 +211,7 @@ pub async fn mender_configure_execute() -> MenderResult<()> {
     }
 }
 
+#[allow(dead_code)]
 pub async fn mender_configure_get() -> MenderResult<KeyStore> {
     // Get the configuration from keystore
     let keystore = MENDER_CONFIGURE_KEYSTORE.lock().await;
@@ -208,6 +225,7 @@ pub async fn mender_configure_get() -> MenderResult<KeyStore> {
     }
 }
 
+#[allow(dead_code)]
 pub async fn mender_configure_set(configuration: &KeyStore) -> MenderResult<()> {
     let mut keystore = MENDER_CONFIGURE_KEYSTORE.lock().await;
 
@@ -244,7 +262,10 @@ pub async fn mender_configure_set(configuration: &KeyStore) -> MenderResult<()> 
         };
 
         // Save to storage
-        if let Err(_) = mender_storage::mender_storage_set_device_config(&device_config).await {
+        if mender_storage::mender_storage_set_device_config(&device_config)
+            .await
+            .is_err()
+        {
             log_error!("Unable to record configuration");
             return Err(MenderError::Failed);
         }
@@ -253,6 +274,7 @@ pub async fn mender_configure_set(configuration: &KeyStore) -> MenderResult<()> 
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn mender_configure_exit() -> MenderResult<()> {
     // Delete mender configure work
     let mut work_handle = MENDER_CONFIGURE_WORK_HANDLE.lock().await;
@@ -282,16 +304,17 @@ pub async fn mender_configure_exit() -> MenderResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn mender_configure_download_artifact_callback(
-    _id: &str,
+    // _id: &str,
     artifact_name: &str,
-    _type: &str,
+    // _type: &str,
     meta_data: Option<&str>,
-    _filename: &str,
-    _size: usize,
-    _data: &[u8],
-    _index: usize,
-    _length: usize,
+    // _filename: &str,
+    // _size: usize,
+    // _data: &[u8],
+    // _index: usize,
+    // _length: usize,
 ) -> MenderResult<()> {
     use crate::mender_mcu_client::platform::storage::mender_storage;
 

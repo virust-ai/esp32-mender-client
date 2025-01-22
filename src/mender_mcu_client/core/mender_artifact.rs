@@ -5,11 +5,7 @@ use crate::{
 };
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
-use alloc::boxed::Box;
 use alloc::format;
-use alloc::string::ToString;
-use core::future::Future;
-use core::pin::Pin;
 use heapless::{String as HString, Vec as HVec};
 use serde::Deserialize;
 
@@ -106,6 +102,7 @@ pub struct HeaderInfo {
 #[derive(Debug, serde::Deserialize)]
 pub struct PayloadInfo {
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     pub payload_type: HString<MAX_STRING_SIZE>,
 }
 
@@ -140,7 +137,12 @@ pub async fn mender_artifact_process_data(
     // Copy data to the end of the internal buffer
     if let Some(data) = input_data {
         if input_length > 0 {
-            if let Err(_) = ctx.input.data.extend_from_slice(&data[..input_length]) {
+            if ctx
+                .input
+                .data
+                .extend_from_slice(&data[..input_length])
+                .is_err()
+            {
                 log_error!("Failed to extend input data buffer");
                 return Err(MenderError::Failed);
             }

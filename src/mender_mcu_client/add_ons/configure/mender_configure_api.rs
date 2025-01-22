@@ -9,10 +9,12 @@ use crate::mender_mcu_client::platform::net::mender_http::{
 use heapless::String as HString;
 use serde_json_core::de::from_str;
 
+#[allow(dead_code)]
 const MENDER_API_PATH_GET_DEVICE_CONFIGURATION: &str = "/api/devices/v1/deviceconfig/configuration";
 const MENDER_API_PATH_PUT_DEVICE_CONFIGURATION: &str = "/api/devices/v1/deviceconfig/configuration";
 const MAX_PAYLOAD_SIZE: usize = 256;
 
+#[allow(dead_code)]
 //#[cfg(not(feature = "mender_client_configure_storage"))]
 pub async fn mender_configure_api_download_configuration_data() -> MenderResult<KeyStore> {
     // Prepare response data structure

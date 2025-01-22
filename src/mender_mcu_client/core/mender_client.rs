@@ -71,16 +71,19 @@ impl MenderClientConfig {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_host(mut self, host: &str) -> Self {
         self.host = host.to_string();
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_auth_interval(mut self, interval: i32) -> Self {
         self.authentication_poll_interval = interval;
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_update_interval(mut self, interval: i32) -> Self {
         self.update_poll_interval = interval;
         self
@@ -124,9 +127,9 @@ impl MenderClientCallbacks {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MenderClientState {
-    MenderClientStateInitialization, // Perform initialization
-    MenderClientStateAuthentication, // Perform authentication with the server
-    MenderClientStateAuthenticated,  // Perform updates
+    Initialization, // Perform initialization
+    Authentication, // Perform authentication with the server
+    Authenticated,  // Perform updates
 }
 
 static MENDER_CLIENT_NETWORK_COUNT: Mutex<CriticalSectionRawMutex, u8> = Mutex::new(0);
@@ -139,7 +142,7 @@ static MENDER_CLIENT_CALLBACKS: Mutex<CriticalSectionRawMutex, Option<MenderClie
 
 // Static client state
 static MENDER_CLIENT_STATE: Mutex<CriticalSectionRawMutex, MenderClientState> =
-    Mutex::new(MenderClientState::MenderClientStateInitialization);
+    Mutex::new(MenderClientState::Initialization);
 
 // Add this with other static variables at the top
 static MENDER_CLIENT_WORK: Mutex<CriticalSectionRawMutex, Option<MenderSchedulerWorkContext>> =
@@ -194,9 +197,11 @@ static MENDER_CLIENT_ARTIFACT_TYPES: Mutex<
     Option<HVec<ArtifactTypeHandler, MAX_JSON_ARRAY_SIZE>>,
 > = Mutex::new(None);
 
+#[allow(dead_code)]
 pub struct CryptoRng<'a>(Trng<'a>);
 
 impl<'a> CryptoRng<'a> {
+    #[allow(dead_code)]
     pub fn new(rng: Trng<'a>) -> Self {
         CryptoRng(rng)
     }
@@ -210,10 +215,10 @@ pub struct FlashCallback;
 impl MenderArtifactCallback for FlashCallback {
     fn call<'a>(
         &'a self,
-        id: &'a str,
-        artifact_name: &'a str,
-        type_name: &'a str,
-        meta_data: &'a str,
+        // _id: &'a str,
+        // _artifact_name: &'a str,
+        // _type_name: &'a str,
+        // _meta_data: &'a str,
         filename: &'a str,
         size: usize,
         data: &'a [u8],
@@ -222,15 +227,11 @@ impl MenderArtifactCallback for FlashCallback {
     ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'a>> {
         Box::pin(async move {
             mender_client_download_artifact_flash_callback(
-                id,
-                artifact_name,
-                type_name,
-                meta_data,
-                filename,
-                size,
-                data,
-                index,
-                length,
+                // id,
+                // artifact_name,
+                // type_name,
+                // meta_data,
+                filename, size, data, index, length,
             )
             .await
         })
@@ -287,11 +288,12 @@ pub async fn mender_client_init(
         Some(token) if !token.is_empty() => Some(token.to_string()),
         _ => {
             // If no token provided or empty, use default
-            if !CONFIG_MENDER_SERVER_TENANT_TOKEN.is_empty() {
-                Some(CONFIG_MENDER_SERVER_TENANT_TOKEN.to_string())
-            } else {
-                None
-            }
+            // if !CONFIG_MENDER_SERVER_TENANT_TOKEN.is_empty() {
+            //     Some(CONFIG_MENDER_SERVER_TENANT_TOKEN.to_string())
+            // } else {
+            //     None
+            // }
+            Some(CONFIG_MENDER_SERVER_TENANT_TOKEN.to_string())
         }
     };
 
@@ -326,13 +328,13 @@ pub async fn mender_client_init(
     // Initialize the scheduler
     mender_scheduler_init(*spawner).expect("Failed to init scheduler");
 
-    if let Err(_) = mender_storage::mender_storage_init().await {
+    if mender_storage::mender_storage_init().await.is_err() {
         log_error!("Unable to initialize storage");
         return Err(MenderError::Other);
     }
 
     // Initialize TLS
-    if let Err(_) = mender_tls::mender_tls_init().await {
+    if mender_tls::mender_tls_init().await.is_err() {
         log_error!("Unable to initialize TLS");
         return Err(MenderError::Other);
     }
@@ -342,13 +344,14 @@ pub async fn mender_client_init(
         .expect("Failed to init mender api");
 
     // Use the static FLASH_CALLBACK instead of creating a new instance
-    if let Err(_) = mender_client_register_artifact_type(
+    if mender_client_register_artifact_type(
         "rootfs-image",
         &FLASH_CALLBACK,
         true,
         &saved_config.artifact_name,
     )
     .await
+    .is_err()
     {
         log_error!("Unable to register 'rootfs-image' artifact type");
         return Err(MenderError::Other);
@@ -447,7 +450,7 @@ pub async fn mender_client_register_addon<C: 'static, CB: 'static>(
 
     // Activate add-on if authentication is already done
     let state = MENDER_CLIENT_STATE.lock().await;
-    if *state == MenderClientState::MenderClientStateAuthenticated {
+    if *state == MenderClientState::Authenticated {
         if let Err(e) = addon.activate().await {
             log_error!("Unable to activate add-on");
             // Cleanup on failure
@@ -482,6 +485,7 @@ pub async fn mender_client_activate() -> MenderError {
     }
 }
 
+#[allow(dead_code)]
 async fn deactivate_addons() -> MenderResult<()> {
     let addons = MENDER_CLIENT_ADDONS.lock().await;
 
@@ -496,6 +500,7 @@ async fn deactivate_addons() -> MenderResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn mender_client_deactivate() -> MenderError {
     // Deactivate add-ons
     if let Err(e) = deactivate_addons().await {
@@ -555,6 +560,7 @@ pub async fn mender_client_network_release() -> MenderResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn release_addons() -> MenderResult<()> {
     let mut addons = MENDER_CLIENT_ADDONS.lock().await;
 
@@ -572,6 +578,7 @@ async fn release_addons() -> MenderResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn mender_client_exit() -> MenderError {
     // Release add-ons
     if let Err(e) = release_addons().await {
@@ -591,12 +598,15 @@ pub async fn mender_client_exit() -> MenderError {
 
     /* Release all modules */
     mender_api::mender_api_exit().await;
-    if let Err(_) = mender_tls::mender_tls_exit().await {
+    if mender_tls::mender_tls_exit().await.is_err() {
         log_error!("Unable to exit TLS");
         return MenderError::Failed;
     }
     let _ = mender_storage::mender_storage_exit().await;
-    if let Err(_) = mender_scheduler::mender_scheduler_work_delete_all().await {
+    if mender_scheduler::mender_scheduler_work_delete_all()
+        .await
+        .is_err()
+    {
         log_error!("Failed to delete all scheduler work");
         return MenderError::Failed;
     }
@@ -609,12 +619,12 @@ async fn mender_client_work_function() -> MenderError {
     log_info!("mender_client_work_function");
 
     let mut state = MENDER_CLIENT_STATE.lock().await;
-    if *state == MenderClientState::MenderClientStateInitialization {
+    if *state == MenderClientState::Initialization {
         // Perform initialization of the client
         match mender_client_initialization_work_function().await {
             Ok(_) => {
                 // Update client state
-                *state = MenderClientState::MenderClientStateAuthentication;
+                *state = MenderClientState::Authentication;
             }
             Err(e) => return e,
         }
@@ -626,7 +636,7 @@ async fn mender_client_work_function() -> MenderError {
     }
 
     // Intentional pass-through
-    if *state == MenderClientState::MenderClientStateAuthentication {
+    if *state == MenderClientState::Authentication {
         // Perform authentication with the server
         if let Err(e) = mender_client_authentication_work_function().await {
             return e;
@@ -644,7 +654,9 @@ async fn mender_client_work_function() -> MenderError {
 
         if let Some(mut w) = work_context {
             log_info!("mender_client_work_function: setting work period", "period" => period);
-            if let Err(_) = mender_scheduler::mender_scheduler_work_set_period(&mut w, period).await
+            if mender_scheduler::mender_scheduler_work_set_period(&mut w, period)
+                .await
+                .is_err()
             {
                 log_error!("Unable to set work period");
                 return MenderError::Other;
@@ -653,11 +665,11 @@ async fn mender_client_work_function() -> MenderError {
 
         log_info!("mender_client_work_function: setting work period done");
         // Update client state
-        *state = MenderClientState::MenderClientStateAuthenticated;
+        *state = MenderClientState::Authenticated;
     }
 
     /* Intentional pass-through */
-    if *state == MenderClientState::MenderClientStateAuthenticated {
+    if *state == MenderClientState::Authenticated {
         // Perform updates
         mender_client_update_work_function().await
     } else {
@@ -683,7 +695,7 @@ async fn mender_client_initialization_work_function() -> MenderResult<()> {
     let mut lock = MENDER_CLIENT_RNG.lock().await;
     let rng = lock.as_mut().ok_or(MenderError::Failed)?;
 
-    mender_tls::mender_tls_init_authentication_keys(&mut rng.get_trng(), recommissioning).await?;
+    mender_tls::mender_tls_init_authentication_keys(rng.get_trng(), recommissioning).await?;
 
     // Retrieve deployment data if it exists
     match mender_storage::mender_storage_get_deployment_data().await {
@@ -914,13 +926,14 @@ async fn mender_client_download_artifact_callback(
                     );
 
                     // Invoke callback for the artifact type
-                    let meta_data_str = meta_data.unwrap_or("");
+                    #[allow(dead_code)]
+                    let _meta_data_str = meta_data.unwrap_or("");
                     (artifact_handler.callback)
                         .call(
-                            id,
-                            artifact_name,
-                            artifact_type_str,
-                            meta_data_str,
+                            // id,
+                            // artifact_name,
+                            // artifact_type_str,
+                            // meta_data_str,
                             filename.unwrap_or("default_filename"),
                             size,
                             data,
@@ -980,15 +993,13 @@ async fn mender_client_authentication_work_function() -> MenderResult<()> {
         // Invoke authentication error callback
         let callbacks = MENDER_CLIENT_CALLBACKS.lock().await;
         if let Some(cb) = callbacks.as_ref() {
-            if let Err(_) = (cb.authentication_failure)() {
+            if (cb.authentication_failure)().is_err() {
                 // Check if deployment is pending
                 let deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
                 if deployment.is_some() {
                     log_error!("Authentication error callback failed, rebooting");
                     // Invoke restart callback
-                    if let Err(e) = (cb.restart)() {
-                        return Err(e);
-                    }
+                    (cb.restart)()?
                 }
             }
         }
@@ -998,14 +1009,12 @@ async fn mender_client_authentication_work_function() -> MenderResult<()> {
     // Invoke authentication success callback
     let callbacks = MENDER_CLIENT_CALLBACKS.lock().await;
     if let Some(cb) = callbacks.as_ref() {
-        if let Err(_) = (cb.authentication_success)() {
+        if (cb.authentication_success)().is_err() {
             // Check if deployment is pending
             let deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
             if deployment.is_some() {
                 log_error!("Authentication success callback failed, rebooting");
-                if let Err(e) = (cb.restart)() {
-                    return Err(e);
-                }
+                (cb.restart)()?
             }
         }
     }
@@ -1025,10 +1034,10 @@ async fn mender_client_authentication_work_function() -> MenderResult<()> {
         if let Some(type_list) = artifact_types.as_ref() {
             for deployment_type in types.iter() {
                 for artifact_type in type_list.iter() {
-                    if artifact_type.type_name == *deployment_type {
-                        if artifact_type.artifact_name != *artifact_name {
-                            success = false;
-                        }
+                    if artifact_type.type_name == *deployment_type
+                        && artifact_type.artifact_name != *artifact_name
+                    {
+                        success = false;
                     }
                 }
             }
@@ -1073,10 +1082,10 @@ async fn activate_addons() -> MenderResult<()> {
 }
 
 async fn mender_client_download_artifact_flash_callback(
-    _id: &str,
-    _artifact_name: &str,
-    _type_name: &str,
-    _meta_data: &str,
+    // _id: &str,
+    // _artifact_name: &str,
+    // _type_name: &str,
+    // _meta_data: &str,
     filename: &str,
     size: usize,
     data: &[u8],

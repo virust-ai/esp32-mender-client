@@ -3,7 +3,6 @@ extern crate alloc;
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 use core::fmt;
 use core::fmt::Write;
 use heapless::{FnvIndexMap, String as HeaplessString};
@@ -14,9 +13,11 @@ use serde_json_core::ser;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MenderError {
     Done,
+    #[allow(dead_code)]
     Ok,
     Failed,
     NotFound,
+    #[allow(dead_code)]
     NotImplemented,
     Other,
 }
@@ -30,6 +31,7 @@ pub enum DeploymentStatus {
     Rebooting,
     Success,
     Failure,
+    #[allow(dead_code)]
     AlreadyInstalled,
 }
 
@@ -70,7 +72,8 @@ impl KeyStore {
         KeyStore { items: HVec::new() }
     }
 
-    pub fn with_capacity(capacity: usize) -> Self {
+    #[allow(dead_code)]
+    pub fn with_capacity(_capacity: usize) -> Self {
         KeyStore {
             items: HVec::<KeyStoreItem, MAX_STRING_SIZE>::new(),
         }
@@ -98,6 +101,7 @@ impl KeyStore {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_item(&self, name: &str) -> Option<&str> {
         self.items
             .iter()
@@ -105,6 +109,7 @@ impl KeyStore {
             .map(|item| item.value.as_str())
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.items.len()
     }
@@ -113,11 +118,13 @@ impl KeyStore {
         self.items.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) -> MenderResult<()> {
         self.items.clear();
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn copy_from(&mut self, src: &KeyStore) -> MenderResult<()> {
         // Ensure there is enough capacity for both existing and new items
         if self.items.len() + src.len() > self.items.capacity() {
@@ -138,6 +145,7 @@ impl KeyStore {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn create_copy(src: &KeyStore) -> MenderResult<Self> {
         let mut new_store = KeyStore::with_capacity(src.len());
         new_store.copy_from(src)?;
@@ -145,6 +153,7 @@ impl KeyStore {
     }
 
     /// Deserialize a KeyStore from a JSON object
+    #[allow(dead_code)]
     pub fn from_json(json: &FnvIndexMap<&str, &str, 16>) -> MenderResult<Self> {
         let mut keystore = KeyStore::with_capacity(json.len());
 
@@ -156,6 +165,7 @@ impl KeyStore {
     }
 
     /// Updates an existing KeyStore with data from a JSON object
+    #[allow(dead_code)]
     pub fn update_from_json(&mut self, json: &FnvIndexMap<&str, &str, 16>) -> MenderResult<()> {
         for (key, value) in json.iter() {
             self.set_item(key, value)?;
@@ -163,6 +173,7 @@ impl KeyStore {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn to_json(&self) -> MenderResult<String> {
         // Create a fixed-capacity map for JSON serialization
         let mut json_map: FnvIndexMap<&str, &str, 16> = FnvIndexMap::new();
