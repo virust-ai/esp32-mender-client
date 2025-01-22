@@ -237,7 +237,7 @@ fn mender_tls_pem_write_buffer(der_data: &[u8]) -> MenderResult<String> {
 
     // Pre-calculate capacity
     let line_length = 64;
-    let num_lines = (b64_data.len() + line_length - 1) / line_length;
+    let num_lines = b64_data.len().div_ceil(line_length);
     let capacity = PEM_BEGIN_PUBLIC_KEY.len() + 1 + // BEGIN tag + newline
         PEM_END_PUBLIC_KEY.len() + 1 +   // END tag + newline
         b64_data.len() +

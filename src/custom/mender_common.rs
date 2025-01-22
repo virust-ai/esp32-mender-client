@@ -33,10 +33,10 @@ pub trait MenderCallback {
 pub trait MenderArtifactCallback: Sync {
     fn call<'a>(
         &'a self,
-        id: &'a str,
-        artifact_name: &'a str,
-        type_name: &'a str,
-        meta_data: &'a str,
+        // id: &'a str,
+        // artifact_name: &'a str,
+        // type_name: &'a str,
+        // meta_data: &'a str,
         filename: &'a str,
         size: usize,
         data: &'a [u8],

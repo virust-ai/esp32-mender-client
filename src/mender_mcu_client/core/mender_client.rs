@@ -215,10 +215,10 @@ pub struct FlashCallback;
 impl MenderArtifactCallback for FlashCallback {
     fn call<'a>(
         &'a self,
-        id: &'a str,
-        artifact_name: &'a str,
-        type_name: &'a str,
-        meta_data: &'a str,
+        // _id: &'a str,
+        // _artifact_name: &'a str,
+        // _type_name: &'a str,
+        // _meta_data: &'a str,
         filename: &'a str,
         size: usize,
         data: &'a [u8],
@@ -227,15 +227,11 @@ impl MenderArtifactCallback for FlashCallback {
     ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'a>> {
         Box::pin(async move {
             mender_client_download_artifact_flash_callback(
-                id,
-                artifact_name,
-                type_name,
-                meta_data,
-                filename,
-                size,
-                data,
-                index,
-                length,
+                // id,
+                // artifact_name,
+                // type_name,
+                // meta_data,
+                filename, size, data, index, length,
             )
             .await
         })
@@ -930,13 +926,14 @@ async fn mender_client_download_artifact_callback(
                     );
 
                     // Invoke callback for the artifact type
-                    let meta_data_str = meta_data.unwrap_or("");
+                    #[allow(dead_code)]
+                    let _meta_data_str = meta_data.unwrap_or("");
                     (artifact_handler.callback)
                         .call(
-                            id,
-                            artifact_name,
-                            artifact_type_str,
-                            meta_data_str,
+                            // id,
+                            // artifact_name,
+                            // artifact_type_str,
+                            // meta_data_str,
                             filename.unwrap_or("default_filename"),
                             size,
                             data,
@@ -1085,10 +1082,10 @@ async fn activate_addons() -> MenderResult<()> {
 }
 
 async fn mender_client_download_artifact_flash_callback(
-    _id: &str,
-    _artifact_name: &str,
-    _type_name: &str,
-    _meta_data: &str,
+    // _id: &str,
+    // _artifact_name: &str,
+    // _type_name: &str,
+    // _meta_data: &str,
     filename: &str,
     size: usize,
     data: &[u8],

@@ -153,7 +153,7 @@ pub async fn connect_to_host<'a>(
         cached_addr
     } else {
         // DNS lookup with timeout
-        let resolved_addr = embassy_time::with_timeout(
+        let resolved_addr = *embassy_time::with_timeout(
             embassy_time::Duration::from_secs(15), // 15 second timeout
             stack.dns_query(host, DnsQueryType::A),
         )
@@ -164,8 +164,7 @@ pub async fn connect_to_host<'a>(
         })?
         .map_err(|_| MenderError::Other)?
         .first()
-        .ok_or(MenderError::Other)?
-        .clone();
+        .ok_or(MenderError::Other)?;
 
         // Cache the new connection info
         cache_conn_info(host.to_string(), resolved_addr).await;
