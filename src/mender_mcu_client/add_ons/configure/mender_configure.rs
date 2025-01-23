@@ -1,7 +1,7 @@
 use crate::log_error;
 use crate::mender_mcu_client::core::{
     mender_client,
-    mender_utils::{KeyStore, MenderError, MenderResult},
+    mender_utils::{KeyStore, MenderResult, MenderStatus},
 };
 use crate::mender_mcu_client::platform::scheduler::mender_scheduler::{
     self, MenderFuture, MenderSchedulerWorkContext,
@@ -14,39 +14,29 @@ use embassy_sync::mutex::Mutex;
 use heapless::FnvIndexMap;
 
 // Constants
-#[allow(dead_code)]
 const CONFIG_MENDER_CLIENT_CONFIGURE_REFRESH_INTERVAL: u64 = 28800;
 
-#[allow(dead_code)]
 pub struct MenderConfigureConfig {
     pub refresh_interval: u64,
 }
 
-#[allow(dead_code)]
 pub struct MenderConfigureCallbacks {
     pub config_updated: Option<fn(&KeyStore)>,
 }
 
-#[allow(dead_code)]
 // Global static variables
 static MENDER_CONFIGURE_CONFIG: Mutex<CriticalSectionRawMutex, Option<MenderConfigureConfig>> =
     Mutex::new(None);
-
-#[allow(dead_code)]
 static MENDER_CONFIGURE_CALLBACKS: Mutex<
     CriticalSectionRawMutex,
     Option<MenderConfigureCallbacks>,
 > = Mutex::new(None);
-
-#[allow(dead_code)]
 static MENDER_CONFIGURE_KEYSTORE: Mutex<CriticalSectionRawMutex, Option<KeyStore>> =
     Mutex::new(None);
 
 #[allow(dead_code)]
 static MENDER_CONFIGURE_ARTIFACT_NAME: Mutex<CriticalSectionRawMutex, Option<String>> =
     Mutex::new(None);
-
-#[allow(dead_code)]
 static MENDER_CONFIGURE_WORK_HANDLE: Mutex<
     CriticalSectionRawMutex,
     Option<MenderSchedulerWorkContext>,
@@ -76,7 +66,7 @@ pub async fn mender_configure_init(
     }
 
     // Try to retrieve device configuration from storage
-    if let Ok(device_config) = mender_storage::mender_storage_get_device_config().await {
+    if let Ok((_, device_config)) = mender_storage::mender_storage_get_device_config().await {
         // Parse and set configuration
         if let Ok((config_data, _)) = serde_json_core::de::from_str::<KeyStore>(&device_config) {
             let mut keystore = MENDER_CONFIGURE_KEYSTORE.lock().await;
@@ -96,11 +86,11 @@ pub async fn mender_configure_init(
     {
         Ok(handle) => {
             *work_handle = Some(handle);
-            Ok(())
+            Ok((MenderStatus::Ok, ()))
         }
         Err(_) => {
             log_error!("Unable to create configure work");
-            Err(MenderError::Failed)
+            Err(MenderStatus::Failed)
         }
     }
 }
@@ -108,7 +98,7 @@ pub async fn mender_configure_init(
 fn mender_configure_work() -> MenderFuture {
     Box::pin(async {
         match mender_configure_work_function().await {
-            Ok(()) => Ok(()),
+            Ok(_) => Ok(()), // Discard the status, just return success
             Err(_) => Err("Configure work failed"),
         }
     })
@@ -123,7 +113,7 @@ async fn mender_configure_work_function() -> MenderResult<()> {
         .is_err()
     {
         log_error!("Requesting access to the network failed");
-        return Err(MenderError::Failed);
+        return Err(MenderStatus::Failed);
     }
 
     #[cfg(not(feature = "mender_client_configure_storage"))]
@@ -164,7 +154,7 @@ async fn mender_configure_work_function() -> MenderResult<()> {
     // Release access to the network
     mender_client::mender_client_network_release().await?;
 
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 #[allow(dead_code)]
@@ -173,12 +163,13 @@ pub async fn mender_configure_activate() -> MenderResult<()> {
     if let Some(handle) = work_handle.as_mut() {
         mender_scheduler::mender_scheduler_work_activate(handle)
             .await
+            .map(|()| (MenderStatus::Ok, ()))
             .map_err(|_| {
                 log_error!("Unable to activate configure work");
-                MenderError::Failed
+                MenderStatus::Failed
             })
     } else {
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -190,10 +181,10 @@ pub async fn mender_configure_deactivate() -> MenderResult<()> {
             .await
             .map_err(|_| {
                 log_error!("Unable to deactivate configure work");
-                MenderError::Failed
+                MenderStatus::Failed
             })?;
     }
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 #[allow(dead_code)]
@@ -202,119 +193,114 @@ pub async fn mender_configure_execute() -> MenderResult<()> {
     if let Some(handle) = work_handle.as_mut() {
         mender_scheduler::mender_scheduler_work_execute(handle)
             .await
+            .map(|()| (MenderStatus::Ok, ()))
             .map_err(|_| {
                 log_error!("Unable to trigger configure work");
-                MenderError::Failed
+                MenderStatus::Failed
             })
     } else {
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
-#[allow(dead_code)]
-pub async fn mender_configure_get() -> MenderResult<KeyStore> {
-    // Get the configuration from keystore
-    let keystore = MENDER_CONFIGURE_KEYSTORE.lock().await;
+// pub async fn mender_configure_get() -> MenderResult<KeyStore> {
+//     // Get the configuration from keystore
+//     let keystore = MENDER_CONFIGURE_KEYSTORE.lock().await;
 
-    match keystore.as_ref() {
-        Some(config) => Ok(config.clone()),
-        None => {
-            log_error!("No configuration available");
-            Err(MenderError::Failed)
-        }
-    }
-}
+//     match keystore.as_ref() {
+//         Some(config) => Ok((MenderStatus::Ok, config.clone())),
+//         None => {
+//             log_error!("No configuration available");
+//             Err(MenderStatus::Failed)
+//         }
+//     }
+// }
 
-#[allow(dead_code)]
-pub async fn mender_configure_set(configuration: &KeyStore) -> MenderResult<()> {
-    let mut keystore = MENDER_CONFIGURE_KEYSTORE.lock().await;
+// pub async fn mender_configure_set(configuration: &KeyStore) -> MenderResult<()> {
+//     let mut keystore = MENDER_CONFIGURE_KEYSTORE.lock().await;
 
-    // Update configuration
-    *keystore = Some(configuration.clone());
+//     // Update configuration
+//     *keystore = Some(configuration.clone());
 
-    #[cfg(feature = "mender_client_configure_storage")]
-    {
-        // Create device config JSON using FnvIndexMap
-        let device_config = {
-            // First serialize the configuration to a JSON string
-            let config_str =
-                serde_json_core::ser::to_string::<_, 1024>(configuration).map_err(|_| {
-                    log_error!("Unable to serialize configuration");
-                    MenderError::Failed
-                })?;
+//     #[cfg(feature = "mender_client_configure_storage")]
+//     {
+//         // Create device config JSON using FnvIndexMap
+//         let device_config = {
+//             // First serialize the configuration to a JSON string
+//             let config_str =
+//                 serde_json_core::ser::to_string::<_, 1024>(configuration).map_err(|_| {
+//                     log_error!("Unable to serialize configuration");
+//                     MenderStatus::Failed
+//                 })?;
 
-            // Get artifact name with extended lifetime
-            let artifact_name_lock = MENDER_CONFIGURE_ARTIFACT_NAME.lock().await;
+//             // Get artifact name with extended lifetime
+//             let artifact_name_lock = MENDER_CONFIGURE_ARTIFACT_NAME.lock().await;
 
-            let mut map: FnvIndexMap<&str, &str, 16> = FnvIndexMap::new();
-            map.insert("config", &config_str)
-                .map_err(|_| MenderError::Failed)?;
+//             let mut map: FnvIndexMap<&str, &str, 16> = FnvIndexMap::new();
+//             map.insert("config", &config_str)
+//                 .map_err(|_| MenderStatus::Failed)?;
 
-            if let Some(artifact_name) = artifact_name_lock.as_ref() {
-                map.insert("artifact_name", artifact_name)
-                    .map_err(|_| MenderError::Failed)?;
-            }
+//             if let Some(artifact_name) = artifact_name_lock.as_ref() {
+//                 map.insert("artifact_name", artifact_name)
+//                     .map_err(|_| MenderStatus::Failed)?;
+//             }
 
-            serde_json_core::ser::to_string::<_, 1024>(&map).map_err(|_| {
-                log_error!("Unable to format device config");
-                MenderError::Failed
-            })?
-        };
+//             serde_json_core::ser::to_string::<_, 1024>(&map).map_err(|_| {
+//                 log_error!("Unable to format device config");
+//                 MenderStatus::Failed
+//             })?
+//         };
 
-        // Save to storage
-        if mender_storage::mender_storage_set_device_config(&device_config)
-            .await
-            .is_err()
-        {
-            log_error!("Unable to record configuration");
-            return Err(MenderError::Failed);
-        }
-    }
+//         // Save to storage
+//         if let Err(_) = mender_storage::mender_storage_set_device_config(&device_config).await {
+//             log_error!("Unable to record configuration");
+//             return Err(MenderStatus::Failed);
+//         }
+//     }
 
-    Ok(())
-}
+//     Ok((MenderStatus::Ok, ()))
+// }
 
-#[allow(dead_code)]
-pub async fn mender_configure_exit() -> MenderResult<()> {
-    // Delete mender configure work
-    let mut work_handle = MENDER_CONFIGURE_WORK_HANDLE.lock().await;
-    if let Some(handle) = work_handle.as_mut() {
-        mender_scheduler::mender_scheduler_work_delete(handle)
-            .await
-            .map_err(|_| {
-                log_error!("Unable to delete configure work");
-                MenderError::Failed
-            })?;
-    }
-    *work_handle = None;
+// pub async fn mender_configure_exit() -> MenderResult<()> {
+//     // Delete mender configure work
+//     let mut work_handle = MENDER_CONFIGURE_WORK_HANDLE.lock().await;
+//     if let Some(handle) = work_handle.as_mut() {
+//         mender_scheduler::mender_scheduler_work_delete(handle)
+//             .await
+//             .map_err(|_| {
+//                 log_error!("Unable to delete configure work");
+//                 MenderStatus::Failed
+//             })?;
+//     }
+//     *work_handle = None;
 
-    // Release memory by setting all globals to None
-    let mut config = MENDER_CONFIGURE_CONFIG.lock().await;
-    *config = None;
+//     // Release memory by setting all globals to None
+//     let mut config = MENDER_CONFIGURE_CONFIG.lock().await;
+//     *config = None;
 
-    let mut callbacks = MENDER_CONFIGURE_CALLBACKS.lock().await;
-    *callbacks = None;
+//     let mut callbacks = MENDER_CONFIGURE_CALLBACKS.lock().await;
+//     *callbacks = None;
 
-    let mut keystore = MENDER_CONFIGURE_KEYSTORE.lock().await;
-    *keystore = None;
+//     let mut keystore = MENDER_CONFIGURE_KEYSTORE.lock().await;
+//     *keystore = None;
 
-    let mut artifact_name = MENDER_CONFIGURE_ARTIFACT_NAME.lock().await;
-    *artifact_name = None;
+//     let mut artifact_name = MENDER_CONFIGURE_ARTIFACT_NAME.lock().await;
+//     *artifact_name = None;
 
-    Ok(())
-}
+//     Ok((MenderStatus::Ok, ()))
+// }
 
 #[allow(dead_code)]
 pub async fn mender_configure_download_artifact_callback(
-    // _id: &str,
+   // _id: &str,
     artifact_name: &str,
-    // _type: &str,
+   // _type: &str,
     meta_data: Option<&str>,
-    // _filename: &str,
-    // _size: usize,
-    // _data: &[u8],
-    // _index: usize,
-    // _length: usize,
+   // _filename: &str,
+   // _size: usize,
+   // _data: &[u8],
+   // _index: usize,
+   // _length: usize,
 ) -> MenderResult<()> {
     use crate::mender_mcu_client::platform::storage::mender_storage;
 
@@ -323,16 +309,16 @@ pub async fn mender_configure_download_artifact_callback(
         let mut config_map: FnvIndexMap<&str, &str, 16> = FnvIndexMap::new();
         config_map
             .insert("artifact_name", artifact_name)
-            .map_err(|_| MenderError::Failed)?;
+            .map_err(|_| MenderStatus::Failed)?;
         config_map
             .insert("config", config_data)
-            .map_err(|_| MenderError::Failed)?;
+            .map_err(|_| MenderStatus::Failed)?;
 
         // Convert to JSON string
         let device_config =
             serde_json_core::ser::to_string::<_, 1024>(&config_map).map_err(|_| {
                 log_error!("Unable to format device config");
-                MenderError::Failed
+                MenderStatus::Failed
             })?;
 
         // Save to storage
@@ -342,5 +328,5 @@ pub async fn mender_configure_download_artifact_callback(
         mender_storage::mender_storage_delete_device_config().await?;
     }
 
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }

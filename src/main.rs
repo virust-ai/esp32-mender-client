@@ -30,7 +30,7 @@ use crate::mender_mcu_client::core::mender_client::{
     mender_client_activate, mender_client_init, MenderClientCallbacks, MenderClientConfig,
 };
 use crate::mender_mcu_client::core::mender_utils::{
-    DeploymentStatus, KeyStore, KeyStoreItem, MenderError, MenderResult,
+    DeploymentStatus, KeyStore, KeyStoreItem, MenderResult, MenderStatus,
 };
 use mender_mcu_client::{
     add_ons::inventory::mender_inventory,
@@ -60,51 +60,51 @@ macro_rules! mk_static {
 fn network_connect_cb() -> MenderResult<()> {
     log_info!("network_connect_cb");
     // Implementation
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 fn network_release_cb() -> MenderResult<()> {
     log_info!("network_release_cb");
     // Implementation
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 fn authentication_success_cb() -> MenderResult<()> {
     log_info!("authentication_success_cb");
     // Implementation
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 fn authentication_failure_cb() -> MenderResult<()> {
     log_info!("authentication_failure_cb");
     // Implementation
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 fn deployment_status_cb(_status: DeploymentStatus, _message: Option<&str>) -> MenderResult<()> {
     log_info!("deployment_status_cb");
     // Implementation
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 fn restart_cb() -> MenderResult<()> {
     log_info!("restart_cb");
     // Implementation
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 fn mender_client_work_test() -> MenderFuture {
     Box::pin(async {
         match my_work_function().await {
-            MenderError::Done => Ok(()),
+            MenderStatus::Done => Ok(()),
             _ => Err("Work failed"),
         }
     })
 }
 
-async fn my_work_function() -> MenderError {
+async fn my_work_function() -> MenderStatus {
     println!("Doing some work...");
-    MenderError::Done
+    MenderStatus::Done
 }
 
 // Make the config static
@@ -120,7 +120,7 @@ async fn main(spawner: Spawner) -> ! {
         config.cpu_clock = CpuClock::max();
         config
     });
-    esp_alloc::heap_allocator!(100 * 1024);
+    esp_alloc::heap_allocator!(120 * 1024);
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     let timg1 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timg1.timer0);
@@ -204,11 +204,20 @@ async fn main(spawner: Spawner) -> ! {
     //     Some("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJtZW5kZXIudGVuYW50IjoiNjVkODMyYjNkY2I2ODI1YmQ2OWJjZGRmIiwiaXNzIjoiTWVuZGVyIiwic3ViIjoiNjVkODMyYjNkY2I2ODI1YmQ2OWJjZGRmIn0.oPgY1QLpvMlNJzc9_ZVbrNlWpAvqtZXXHWilw6kVZD-0HZQNZGt4nXbvOFrekfbgU7zHfK9N6ovqWffa7MjqFjceEfbpagYASchFcuqRZPBGTc5MBUmF0YZWzvaw0pBYLK5sakUiEVoAvQJsSdy75NcipTlHneaB96y5WoPBdP7fkdRb0UIWBIHi4O5ZFwDYgaP5SJBj9i-akoIvqnTsZjGfATUuqpNIErnE4yPwn0Rf2CgIdrgl2daTZAwFB0lbHC_Xm2IT5LjbODdTvtnJyVfYoIpU0Bn34YoCl538sPbzIsyArIit8D3uQ8aeviUiyXt857dSbSBE6wHV0gsJMxjBQZApFaYIH4FEk7g2PEV5Q3Fo0-TcL6BXrE10u3DDOMZbspLrqozq_eVfWth6aa_5fNlKIoZeesuwd4QJlviwUSRnCBdN2W-Elu8bhKSfRRmLPX5RL6g_BMyrM-wvcV96kFobZy52IZuMIjAex3I3p7gCu4IxWGB1KrxnmJPi")
     // ).with_recommissioning(false);
 
+    // let config = MenderClientConfig::new(
+    //     identity,
+    //     "artifact-1.0",
+    //     "esp32c6",
+    //     "https://mender.bluleap.ai",
+    //     None,
+    // )
+    // .with_recommissioning(false);
+
     let config = MenderClientConfig::new(
         identity,
         "artifact-1.0",
         "esp32c6",
-        "https://mender.bluleap.ai",
+        "https://mender-s.ionmobility.com",
         None,
     )
     .with_recommissioning(false);
@@ -300,7 +309,7 @@ async fn main(spawner: Spawner) -> ! {
     }
 
     match mender_client_activate().await {
-        MenderError::Done => println!("Client activated successfully"),
+        MenderStatus::Done => println!("Client activated successfully"),
         _ => panic!("Failed to activate client"),
     };
 

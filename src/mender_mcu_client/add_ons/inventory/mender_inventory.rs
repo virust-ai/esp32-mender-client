@@ -1,6 +1,6 @@
 use crate::mender_mcu_client::add_ons::mender_addon::MenderAddonInstance;
 use crate::mender_mcu_client::core::mender_client;
-use crate::mender_mcu_client::core::mender_utils::{KeyStore, MenderError, MenderResult};
+use crate::mender_mcu_client::core::mender_utils::{KeyStore, MenderResult, MenderStatus};
 use crate::mender_mcu_client::platform::scheduler::mender_scheduler::{
     self, MenderFuture, MenderSchedulerWorkContext,
 };
@@ -70,11 +70,11 @@ pub async fn mender_inventory_init(
     {
         Ok(handle) => {
             *work_handle = Some(handle);
-            Ok(())
+            Ok((MenderStatus::Ok, ()))
         }
         Err(_) => {
             log_error!("Unable to create inventory work");
-            Err(MenderError::Failed)
+            Err(MenderStatus::Failed)
         }
     }
 }
@@ -82,7 +82,7 @@ pub async fn mender_inventory_init(
 fn mender_inventory_work() -> MenderFuture {
     Box::pin(async {
         match mender_inventory_work_function().await {
-            Ok(()) => Ok(()),
+            Ok(_) => Ok(()), // Discard the status, just return success
             Err(_) => Err("Inventory work failed"),
         }
     })
@@ -94,13 +94,14 @@ pub async fn mender_inventory_activate() -> MenderResult<()> {
     if let Some(handle) = work_handle.as_mut() {
         mender_scheduler::mender_scheduler_work_activate(handle)
             .await
+            .map(|()| (MenderStatus::Ok, ()))
             .map_err(|_| {
                 log_error!("Unable to activate inventory work");
-                MenderError::Failed
+                MenderStatus::Failed
             })
     } else {
         log_error!("Unable to activate inventory work");
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -111,10 +112,10 @@ pub async fn mender_inventory_deactivate() -> MenderResult<()> {
             .await
             .map_err(|_| {
                 log_error!("Unable to deactivate inventory work");
-                MenderError::Failed
+                MenderStatus::Failed
             })?;
     }
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 pub async fn mender_inventory_set(inventory: &KeyStore) -> MenderResult<()> {
@@ -126,7 +127,7 @@ pub async fn mender_inventory_set(inventory: &KeyStore) -> MenderResult<()> {
     // Copy the new inventory
     *keystore = Some(inventory.clone());
 
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 #[allow(dead_code)]
@@ -135,12 +136,13 @@ pub async fn mender_inventory_execute() -> MenderResult<()> {
     if let Some(handle) = work_handle.as_mut() {
         mender_scheduler::mender_scheduler_work_execute(handle)
             .await
+            .map(|()| (MenderStatus::Ok, ()))
             .map_err(|_| {
                 log_error!("Unable to trigger inventory work");
-                MenderError::Failed
+                MenderStatus::Failed
             })
     } else {
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -152,7 +154,7 @@ pub async fn mender_inventory_exit() -> MenderResult<()> {
             .await
             .map_err(|_| {
                 log_error!("Unable to delete inventory work");
-                MenderError::Failed
+                MenderStatus::Failed
             })?;
     }
     *work_handle = None;
@@ -164,7 +166,7 @@ pub async fn mender_inventory_exit() -> MenderResult<()> {
     let mut keystore = MENDER_INVENTORY_KEYSTORE.lock().await;
     *keystore = None;
 
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 async fn mender_inventory_work_function() -> MenderResult<()> {
@@ -177,7 +179,7 @@ async fn mender_inventory_work_function() -> MenderResult<()> {
         .is_err()
     {
         log_error!("Requesting access to the network failed");
-        return Err(MenderError::Failed);
+        return Err(MenderStatus::Failed);
     }
 
     // Get artifact name and device type first since they're async
@@ -202,5 +204,5 @@ async fn mender_inventory_work_function() -> MenderResult<()> {
     // Release access to the network
     mender_client::mender_client_network_release().await?;
 
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }

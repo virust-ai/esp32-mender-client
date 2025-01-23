@@ -1,4 +1,4 @@
-use crate::mender_mcu_client::core::mender_utils::{MenderError, MenderResult};
+use crate::mender_mcu_client::core::mender_utils::{MenderResult, MenderStatus};
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::string::String;
@@ -26,9 +26,9 @@ const MAX_DATA_SIZE: usize = 2048;
 
 static MENDER_STORAGE: Mutex<CriticalSectionRawMutex, Option<FlashStorage>> = Mutex::new(None);
 
-impl From<FlashStorageError> for MenderError {
+impl From<FlashStorageError> for MenderStatus {
     fn from(_: FlashStorageError) -> Self {
-        MenderError::Failed
+        MenderStatus::Failed
     }
 }
 
@@ -37,7 +37,7 @@ pub async fn mender_storage_init() -> MenderResult<()> {
     let storage = FlashStorage::new();
     let mut conf = MENDER_STORAGE.lock().await;
     *conf = Some(storage);
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 pub async fn mender_storage_get_authentication_keys() -> MenderResult<(Vec<u8>, Vec<u8>)> {
@@ -60,10 +60,10 @@ pub async fn mender_storage_get_authentication_keys() -> MenderResult<(Vec<u8>, 
         // Validate sizes
         if priv_len > MAX_KEY_SIZE || pub_len > MAX_KEY_SIZE {
             log_error!("Stored key size too large");
-            return Err(MenderError::Failed);
+            return Err(MenderStatus::Failed);
         } else if priv_len == 0 || pub_len == 0 {
             log_error!("No authentication keys found");
-            return Err(MenderError::NotFound);
+            return Err(MenderStatus::NotFound);
         }
 
         // Read keys
@@ -74,10 +74,10 @@ pub async fn mender_storage_get_authentication_keys() -> MenderResult<(Vec<u8>, 
         storage.read(PUBLIC_KEY_ADDR + 4, &mut public_key)?;
 
         log_info!("Authentication keys retrieved successfully");
-        Ok((private_key, public_key))
+        Ok((MenderStatus::Ok, (private_key, public_key)))
     } else {
         log_error!("Failed to get authentication keys");
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -90,7 +90,7 @@ pub async fn mender_storage_set_authentication_keys(
     if let Some(storage) = storage.as_mut() {
         if private_key.len() > MAX_KEY_SIZE || public_key.len() > MAX_KEY_SIZE {
             log_error!("Key size too large");
-            return Err(MenderError::Failed);
+            return Err(MenderStatus::Failed);
         }
 
         let priv_len = private_key.len() as u32;
@@ -102,10 +102,10 @@ pub async fn mender_storage_set_authentication_keys(
         storage.write(PUBLIC_KEY_ADDR + 4, public_key)?;
 
         log_info!("Authentication keys set successfully");
-        Ok(())
+        Ok((MenderStatus::Ok, ()))
     } else {
         log_error!("Failed to set authentication keys");
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -115,10 +115,10 @@ pub async fn mender_storage_delete_authentication_keys() -> MenderResult<()> {
         storage.write(PRIVATE_KEY_ADDR, &[0u8; 4])?;
         storage.write(PUBLIC_KEY_ADDR, &[0u8; 4])?;
         log_info!("Authentication keys deleted successfully");
-        Ok(())
+        Ok((MenderStatus::Ok, ()))
     } else {
         log_error!("Failed to delete authentication keys");
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -129,17 +129,17 @@ pub async fn mender_storage_set_deployment_data(deployment_data: &str) -> Mender
         let data = deployment_data.as_bytes();
         if data.len() > MAX_DATA_SIZE {
             log_error!("Deployment data too large");
-            return Err(MenderError::Failed);
+            return Err(MenderStatus::Failed);
         }
 
         let len = data.len() as u32;
         storage.write(DEPLOYMENT_DATA_ADDR, &len.to_le_bytes())?;
         storage.write(DEPLOYMENT_DATA_ADDR + 4, data)?;
         log_info!("Deployment data set successfully");
-        Ok(())
+        Ok((MenderStatus::Ok, ()))
     } else {
         log_error!("Failed to set deployment data");
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -153,19 +153,21 @@ pub async fn mender_storage_get_deployment_data() -> MenderResult<String> {
 
         if len == 0 || len > MAX_DATA_SIZE {
             log_error!("Deployment data not found");
-            return Err(MenderError::NotFound);
+            return Err(MenderStatus::NotFound);
         }
 
         let mut data = vec![0u8; len];
         storage.read(DEPLOYMENT_DATA_ADDR + 4, &mut data)?;
 
-        String::from_utf8(data).map_err(|_| {
-            log_error!("Invalid UTF-8 in deployment data");
-            MenderError::Failed
-        })
+        String::from_utf8(data)
+            .map_err(|_| {
+                log_error!("Invalid UTF-8 in deployment data");
+                MenderStatus::Failed
+            })
+            .map(|s| (MenderStatus::Ok, s))
     } else {
         log_error!("Failed to get deployment data");
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -174,10 +176,10 @@ pub async fn mender_storage_delete_deployment_data() -> MenderResult<()> {
     if let Some(storage) = storage.as_mut() {
         storage.write(DEPLOYMENT_DATA_ADDR, &[0u8; 4])?;
         log_info!("Deployment data deleted successfully");
-        Ok(())
+        Ok((MenderStatus::Ok, ()))
     } else {
         log_error!("Failed to delete deployment data");
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -185,7 +187,7 @@ pub async fn mender_storage_delete_deployment_data() -> MenderResult<()> {
 pub async fn mender_storage_exit() -> MenderResult<()> {
     let mut storage = MENDER_STORAGE.lock().await;
     *storage = None;
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 pub async fn mender_storage_set_device_config(device_config: &str) -> MenderResult<()> {
@@ -195,17 +197,17 @@ pub async fn mender_storage_set_device_config(device_config: &str) -> MenderResu
         let data = device_config.as_bytes();
         if data.len() > MAX_DATA_SIZE {
             log_error!("Device config too large");
-            return Err(MenderError::Failed);
+            return Err(MenderStatus::Failed);
         }
 
         let len = data.len() as u32;
         storage.write(DEVICE_CONFIG_ADDR, &len.to_le_bytes())?;
         storage.write(DEVICE_CONFIG_ADDR + 4, data)?;
         log_info!("Device configuration set successfully");
-        Ok(())
+        Ok((MenderStatus::Ok, ()))
     } else {
         log_error!("Failed to set device configuration");
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -219,19 +221,21 @@ pub async fn mender_storage_get_device_config() -> MenderResult<String> {
 
         if len == 0 || len > MAX_DATA_SIZE {
             log_error!("Device config not found");
-            return Err(MenderError::NotFound);
+            return Err(MenderStatus::NotFound);
         }
 
         let mut data = vec![0u8; len];
         storage.read(DEVICE_CONFIG_ADDR + 4, &mut data)?;
 
-        String::from_utf8(data).map_err(|_| {
-            log_error!("Invalid UTF-8 in device config");
-            MenderError::Failed
-        })
+        String::from_utf8(data)
+            .map_err(|_| {
+                log_error!("Invalid UTF-8 in device config");
+                MenderStatus::Failed
+            })
+            .map(|s| (MenderStatus::Ok, s))
     } else {
         log_error!("Failed to get device configuration");
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }
 
@@ -241,9 +245,9 @@ pub async fn mender_storage_delete_device_config() -> MenderResult<()> {
     if let Some(storage) = storage.as_mut() {
         storage.write(DEVICE_CONFIG_ADDR, &[0u8; 4])?;
         log_info!("Device configuration deleted successfully");
-        Ok(())
+        Ok((MenderStatus::Ok, ()))
     } else {
         log_error!("Failed to delete device configuration");
-        Err(MenderError::Failed)
+        Err(MenderStatus::Failed)
     }
 }

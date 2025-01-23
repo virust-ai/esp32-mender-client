@@ -1,6 +1,6 @@
 use crate::alloc::string::ToString;
-use crate::mender_mcu_client::core::mender_utils::MenderError;
 use crate::mender_mcu_client::core::mender_utils::MenderResult;
+use crate::mender_mcu_client::core::mender_utils::MenderStatus;
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::string::String;
@@ -24,7 +24,7 @@ pub async fn mender_flash_open(filename: &str, size: usize) -> MenderResult<()> 
     // Check if flash is already open
     if handle.is_some() {
         log_error!("Flash already open");
-        return Err(MenderError::Failed);
+        return Ok((MenderStatus::Ok, ()));
     }
 
     // Create new flash handle
@@ -35,28 +35,28 @@ pub async fn mender_flash_open(filename: &str, size: usize) -> MenderResult<()> 
     });
 
     log_info!("Opened flash for :", "filename" => filename, "size" => size);
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
-pub async fn mender_flash_write(data: &[u8], index: usize, length: usize) -> MenderResult<()> {
-    log_info!("mender_flash_write", "data" => data, "index" => index, "length" => length);
+pub async fn mender_flash_write(_data: &[u8], index: usize, length: usize) -> MenderResult<()> {
+    log_info!("mender_flash_write", "index" => index, "length" => length);
     let mut handle = FLASH_HANDLE.lock().await;
 
     let flash = handle.as_mut().ok_or_else(|| {
         log_error!("Flash not open");
-        MenderError::Failed
+        MenderStatus::Failed
     })?;
 
     // Validate write position
     if index != flash.current_position {
         log_error!("Invalid write position", "flash.current_position" => flash.current_position, "index" => index);
-        return Err(MenderError::Failed);
+        return Err(MenderStatus::Failed);
     }
 
     // Validate write size
     if index + length > flash.size {
         log_error!("Write exceeds flash size");
-        return Err(MenderError::Failed);
+        return Err(MenderStatus::Failed);
     }
 
     // Update position
@@ -69,7 +69,7 @@ pub async fn mender_flash_write(data: &[u8], index: usize, length: usize) -> Men
         "flash.filename" => flash.filename
     );
 
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 pub async fn mender_flash_close() -> MenderResult<()> {
@@ -78,7 +78,7 @@ pub async fn mender_flash_close() -> MenderResult<()> {
 
     if handle.is_none() {
         log_error!("Flash not open");
-        return Err(MenderError::Failed);
+        return Err(MenderStatus::Failed);
     }
 
     // Get the handle before clearing it
@@ -91,7 +91,7 @@ pub async fn mender_flash_close() -> MenderResult<()> {
             "flash.current_position" => flash.current_position,
             "flash.size" => flash.size
         );
-        return Err(MenderError::Failed);
+        return Err(MenderStatus::Failed);
     }
 
     log_info!(
@@ -103,7 +103,7 @@ pub async fn mender_flash_close() -> MenderResult<()> {
     // Clear the handle
     *handle = None;
 
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 pub async fn mender_flash_abort_deployment() -> MenderResult<()> {
@@ -115,11 +115,11 @@ pub async fn mender_flash_abort_deployment() -> MenderResult<()> {
         *handle = None;
     }
 
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }
 
 pub async fn mender_flash_set_pending_image() -> MenderResult<()> {
     log_info!("mender_flash_set_pending_image");
     // Temporary mock implementation
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }

@@ -28,7 +28,6 @@ pub trait MenderAddon: Send + Sync {
         callbacks: Option<&'static ()>,
     ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
     fn activate(&self) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
-    #[allow(dead_code)]
     fn deactivate(&self) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
     fn exit(&self) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
 }

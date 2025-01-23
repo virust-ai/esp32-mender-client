@@ -17,10 +17,10 @@ const CONFIG_MENDER_SCHEDULER_WORK_QUEUE_LENGTH: usize = 10;
 const MAX_NAME_LENGTH: usize = 32;
 
 // Type definitions
-pub type MenderError = Result<(), &'static str>;
+pub type MenderStatus = Result<(), &'static str>;
 
 // Define type alias for the future
-pub type MenderFuture = Pin<Box<dyn Future<Output = MenderError> + 'static>>;
+pub type MenderFuture = Pin<Box<dyn Future<Output = MenderStatus> + 'static>>;
 
 /// Parameters for a work item
 #[derive(Clone)]
@@ -45,7 +45,6 @@ pub struct MenderSchedulerWorkContext {
 pub enum SchedulerCommand {
     AddWork(MenderSchedulerWorkContext),
     RemoveWork(String<MAX_NAME_LENGTH>),
-    #[allow(dead_code)]
     RemoveAllWorks,
     SetPeriod(String<MAX_NAME_LENGTH>, i32), // Just name and period
 }
@@ -98,7 +97,7 @@ impl MenderSchedulerWorkContext {
     }
 
     /// Execute the work if conditions are met
-    async fn execute(&mut self) -> MenderError {
+    async fn execute(&mut self) -> MenderStatus {
         //let _lock = WORK_STATUS_MUTEX.lock().await;
 
         if self.is_executing || !self.activated {
@@ -135,7 +134,7 @@ impl MenderSchedulerWorkContext {
     }
 
     /// Activate the work
-    async fn activate(&mut self) -> MenderError {
+    async fn activate(&mut self) -> MenderStatus {
         //println!("Attempting to acquire lock for '{}'", self.params.name);
         //let _lock = WORK_STATUS_MUTEX.lock().await;
         //println!("Lock acquired for '{}'", self.params.name);
@@ -149,7 +148,7 @@ impl MenderSchedulerWorkContext {
     }
 
     /// Deactivate the work
-    async fn deactivate(&mut self) -> MenderError {
+    async fn deactivate(&mut self) -> MenderStatus {
         //let _lock = WORK_STATUS_MUTEX.lock().await;
         if self.activated {
             while self.is_executing {
@@ -165,7 +164,7 @@ impl MenderSchedulerWorkContext {
 
     /// Set the period for periodic execution
     #[allow(dead_code)]
-    async fn set_period(&mut self, period: i32) -> MenderError {
+    async fn set_period(&mut self, period: i32) -> MenderStatus {
         //let _lock = WORK_STATUS_MUTEX.lock().await;
         self.params.period = period;
         println!("Work '{}' period set to {}s", self.params.name, period);
@@ -222,7 +221,6 @@ impl Scheduler {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub async fn delete_all_works(&self) -> Result<(), &'static str> {
         println!("Removing all scheduled works");
         self.work_queue.send(SchedulerCommand::RemoveAllWorks).await;
