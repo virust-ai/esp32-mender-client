@@ -18,7 +18,7 @@ use embassy_sync::mutex::Mutex as EmbassyMutex;
 use crate::{
     log_error,
     mender_mcu_client::{
-        core::mender_utils::{MenderError, MenderResult},
+        core::mender_utils::{MenderStatus, MenderResult},
         platform::net::mender_http::connect_to_host,
     },
 };
@@ -73,17 +73,17 @@ impl<'a> WebSocketStream<'a> {
 
     pub async fn read(&mut self, buf: &mut [u8]) -> MenderResult<usize> {
         if let Some(conn) = &mut self.connection {
-            conn.read(buf).await.map_err(|_| MenderError::Failed)
+            conn.read(buf).await.map_err(|_| MenderStatus::Failed)
         } else {
-            Err(MenderError::Failed)
+            Err(MenderStatus::Failed)
         }
     }
 
     pub async fn write_all(&mut self, buf: &[u8]) -> MenderResult<()> {
         if let Some(conn) = &mut self.connection {
-            conn.write_all(buf).await.map_err(|_| MenderError::Failed)
+            conn.write_all(buf).await.map_err(|_| MenderStatus::Failed)
         } else {
-            Err(MenderError::Failed)
+            Err(MenderStatus::Failed)
         }
     }
 
@@ -102,7 +102,7 @@ impl<'a> WebSocketStream<'a> {
         embassy_time::with_timeout(
             timeout,
             self.read(buf)
-        ).await.map_err(|_| MenderError::Failed)?
+        ).await.map_err(|_| MenderStatus::Failed)?
     }
 
     pub async fn write_with_timeout(
@@ -113,7 +113,7 @@ impl<'a> WebSocketStream<'a> {
         embassy_time::with_timeout(
             timeout,
             self.write_all(buf)
-        ).await.map_err(|_| MenderError::Failed)?
+        ).await.map_err(|_| MenderStatus::Failed)?
     }
 }
 
@@ -154,7 +154,7 @@ pub async fn websocket_connect<'a>(
     callback: impl Fn(WebSocketEvent, Option<&[u8]>, Option<&[u8]>) -> MenderResult<()> + Send + Sync + 'static,
 ) -> MenderResult<WebSocketHandle<'a>> {
     let config = WEBSOCKET_CONFIG.lock().await;
-    let config = config.as_ref().ok_or(MenderError::Failed)?;
+    let config = config.as_ref().ok_or(MenderStatus::Failed)?;
 
     // Construct WebSocket URL
     let url = if path.starts_with("ws://") || path.starts_with("wss://") {
@@ -174,7 +174,7 @@ pub async fn websocket_connect<'a>(
         .split("://")
         .nth(1)
         .and_then(|s| s.split('/').next())
-        .ok_or(MenderError::Failed)?;
+        .ok_or(MenderStatus::Failed)?;
 
     let mut ws = WebSocket::<Trng<'static>, Client>::new_client(rng);
 
@@ -194,7 +194,7 @@ pub async fn websocket_connect<'a>(
 
     let (handshake_len, _key) = ws
         .client_connect(&options, &mut handshake_buffer)
-        .map_err(|_| MenderError::Failed)?;
+        .map_err(|_| MenderStatus::Failed)?;
 
     // Create the buffers first
     let read_buffer = Arc::new(EmbassyMutex::<NoopRawMutex, Vec<u8>>::new(
@@ -244,7 +244,7 @@ impl<'a> WebSocketHandle<'a> {
                 ).await {
                     Ok(size) if size > 0 => {
                         let read_result = self.websocket.read(&buffer[..size], &mut output_buffer)
-                            .map_err(|_| MenderError::Failed)?;
+                            .map_err(|_| MenderStatus::Failed)?;
                         
                         match read_result.message_type {
                             WebSocketReceiveMessageType::Binary => {
@@ -269,7 +269,7 @@ impl<'a> WebSocketHandle<'a> {
                                     true,
                                     &output_buffer[..read_result.len_to],
                                     &mut pong_buffer,
-                                ).map_err(|_| MenderError::Failed)?;
+                                ).map_err(|_| MenderStatus::Failed)?;
 
                                 stream.write_all(&pong_buffer[..frame_len]).await?;
                             }
@@ -304,7 +304,7 @@ impl<'a> WebSocketHandle<'a> {
             true,
             data,
             &mut buffer,
-        ).map_err(|_| MenderError::Failed)?;
+        ).map_err(|_| MenderStatus::Failed)?;
 
         if let Some(stream) = &mut self.stream {
             stream.write_with_timeout(
@@ -334,7 +334,7 @@ pub async fn websocket_disconnect(handle: &mut WebSocketHandle<'_>) -> MenderRes
         true,          // Final fragment
         &payload,      // Payload with close code and reason
         &mut buffer,   // Buffer to hold the frame
-    ).map_err(|_| MenderError::Failed)?;
+    ).map_err(|_| MenderStatus::Failed)?;
 
     if let Some(stream) = &mut handle.stream {
         let _ = stream.write_all(&buffer[..frame_len]).await;

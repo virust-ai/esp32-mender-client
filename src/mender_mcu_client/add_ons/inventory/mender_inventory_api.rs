@@ -3,7 +3,7 @@ extern crate alloc;
 use crate::mender_mcu_client::core::mender_api::{
     mender_api_get_authentication_token, MyTextCallback,
 };
-use crate::mender_mcu_client::core::mender_utils::{KeyStore, MenderError, MenderResult};
+use crate::mender_mcu_client::core::mender_utils::{KeyStore, MenderResult, MenderStatus};
 use crate::mender_mcu_client::platform::net::mender_http::{
     self, HttpMethod, MenderHttpResponseData,
 };
@@ -60,7 +60,7 @@ pub async fn mender_inventory_api_publish_inventory_data(
     let payload = format!("[{}]", object);
     log_info!("payload:", "payload" => payload);
 
-    let jwt = mender_api_get_authentication_token().await?;
+    let (_, jwt) = mender_api_get_authentication_token().await?;
     let my_text_callback = MyTextCallback;
     let mut response_data = MenderHttpResponseData::default();
     let mut status = 0;
@@ -80,8 +80,8 @@ pub async fn mender_inventory_api_publish_inventory_data(
 
     if ret.is_err() || status != 200 {
         log_error!("Unable to perform HTTP request");
-        return Err(MenderError::Failed);
+        return Err(MenderStatus::Failed);
     }
 
-    Ok(())
+    Ok((MenderStatus::Ok, ()))
 }

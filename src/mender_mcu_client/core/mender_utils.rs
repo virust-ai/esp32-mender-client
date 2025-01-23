@@ -11,18 +11,18 @@ use serde::{Deserialize, Serialize};
 use serde_json_core::ser;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum MenderError {
+pub enum MenderStatus {
     Done,
-    #[allow(dead_code)]
     Ok,
     Failed,
     NotFound,
     #[allow(dead_code)]
     NotImplemented,
     Other,
+    Network,
 }
 
-pub type MenderResult<T> = core::result::Result<T, MenderError>;
+pub type MenderResult<T> = core::result::Result<(MenderStatus, T), MenderStatus>;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DeploymentStatus {
@@ -82,23 +82,23 @@ impl KeyStore {
     pub fn set_item(&mut self, name: &str, value: &str) -> MenderResult<()> {
         if let Some(item) = self.items.iter_mut().find(|item| item.name == name) {
             let mut hvalue = HString::<MAX_STRING_SIZE>::new();
-            hvalue.push_str(value).map_err(|_| MenderError::Failed)?;
+            hvalue.push_str(value).map_err(|_| MenderStatus::Failed)?;
             item.value = hvalue;
         } else {
             let mut hname = HString::<MAX_STRING_SIZE>::new();
             let mut hvalue = HString::<MAX_STRING_SIZE>::new();
 
-            hname.push_str(name).map_err(|_| MenderError::Failed)?;
-            hvalue.push_str(value).map_err(|_| MenderError::Failed)?;
+            hname.push_str(name).map_err(|_| MenderStatus::Failed)?;
+            hvalue.push_str(value).map_err(|_| MenderStatus::Failed)?;
 
             self.items
                 .push(KeyStoreItem {
                     name: hname,
                     value: hvalue,
                 })
-                .map_err(|_| MenderError::Failed)?;
+                .map_err(|_| MenderStatus::Failed)?;
         }
-        Ok(())
+        Ok((MenderStatus::Ok, ()))
     }
 
     #[allow(dead_code)]
@@ -121,7 +121,7 @@ impl KeyStore {
     #[allow(dead_code)]
     pub fn clear(&mut self) -> MenderResult<()> {
         self.items.clear();
-        Ok(())
+        Ok((MenderStatus::Ok, ()))
     }
 
     #[allow(dead_code)]
@@ -129,7 +129,7 @@ impl KeyStore {
         // Ensure there is enough capacity for both existing and new items
         if self.items.len() + src.len() > self.items.capacity() {
             log_error!("Not enough capacity to copy items");
-            return Err(MenderError::Failed);
+            return Err(MenderStatus::Failed);
         }
 
         // Copy all items from source
@@ -139,17 +139,17 @@ impl KeyStore {
                     name: item.name.clone(),
                     value: item.value.clone(),
                 })
-                .map_err(|_| MenderError::Failed)?;
+                .map_err(|_| MenderStatus::Failed)?;
         }
 
-        Ok(())
+        Ok((MenderStatus::Ok, ()))
     }
 
     #[allow(dead_code)]
     pub fn create_copy(src: &KeyStore) -> MenderResult<Self> {
         let mut new_store = KeyStore::with_capacity(src.len());
         new_store.copy_from(src)?;
-        Ok(new_store)
+        Ok((MenderStatus::Ok, new_store))
     }
 
     /// Deserialize a KeyStore from a JSON object
@@ -161,7 +161,7 @@ impl KeyStore {
             keystore.set_item(key, value)?;
         }
 
-        Ok(keystore)
+        Ok((MenderStatus::Ok, keystore))
     }
 
     /// Updates an existing KeyStore with data from a JSON object
@@ -170,7 +170,7 @@ impl KeyStore {
         for (key, value) in json.iter() {
             self.set_item(key, value)?;
         }
-        Ok(())
+        Ok((MenderStatus::Ok, ()))
     }
 
     #[allow(dead_code)]
@@ -186,7 +186,7 @@ impl KeyStore {
             // Insert into the map, checking for capacity issues
             json_map
                 .insert(key, value)
-                .map_err(|_| MenderError::Failed)?;
+                .map_err(|_| MenderStatus::Failed)?;
         }
 
         // Serialize the map into a heapless::String
@@ -194,12 +194,12 @@ impl KeyStore {
         write!(
             json_string,
             "{}",
-            ser::to_string::<_, 256>(&json_map).map_err(|_| MenderError::Failed)?
+            ser::to_string::<_, 256>(&json_map).map_err(|_| MenderStatus::Failed)?
         )
-        .map_err(|_| MenderError::Failed)?;
+        .map_err(|_| MenderStatus::Failed)?;
 
         // Convert heapless::String to alloc::String
-        Ok(json_string.to_string())
+        Ok((MenderStatus::Ok, json_string.to_string()))
     }
 }
 
@@ -216,7 +216,7 @@ pub fn mender_utils_keystore_to_json(keystore: &KeyStore) -> MenderResult<String
         // Insert into the map, checking for capacity issues
         json_map
             .insert(key, value)
-            .map_err(|_| MenderError::Failed)?;
+            .map_err(|_| MenderStatus::Failed)?;
     }
 
     // Serialize the map into a heapless::String
@@ -224,12 +224,12 @@ pub fn mender_utils_keystore_to_json(keystore: &KeyStore) -> MenderResult<String
     write!(
         json_string,
         "{}",
-        ser::to_string::<_, 256>(&json_map).map_err(|_| MenderError::Failed)?
+        ser::to_string::<_, 256>(&json_map).map_err(|_| MenderStatus::Failed)?
     )
-    .map_err(|_| MenderError::Failed)?;
+    .map_err(|_| MenderStatus::Failed)?;
 
     // Convert heapless::String to alloc::String
-    Ok(json_string.to_string())
+    Ok((MenderStatus::Ok, json_string.to_string()))
 }
 
 pub fn mender_utils_http_status_to_string(status: i32) -> Option<&'static str> {
@@ -292,6 +292,32 @@ pub fn mender_utils_http_status_to_string(status: i32) -> Option<&'static str> {
     }
 }
 
+/// Find the last occurrence of a substring in a string
+///
+/// This is equivalent to the C function mender_utils_strrstr
+pub fn mender_utils_strrstr<'a>(haystack: &'a str, needle: &str) -> Option<&'a str> {
+    // Check if needle is empty
+    if needle.is_empty() {
+        return Some(&haystack[haystack.len()..]);
+    }
+
+    // Find last occurrence using forward search
+    let mut last_pos = None;
+    let mut current_pos = 0;
+
+    while let Some(pos) = haystack[current_pos..].find(needle) {
+        current_pos += pos;
+        last_pos = Some(current_pos);
+        current_pos += 1;
+        if current_pos >= haystack.len() {
+            break;
+        }
+    }
+
+    // Return slice from the last found position if any
+    last_pos.map(|pos| &haystack[pos..])
+}
+
 // pub fn mender_utils_str_begins_with(s1: &str, s2: &str) -> bool {
 //     s1.starts_with(s2)
 // }
@@ -308,7 +334,7 @@ pub fn mender_utils_http_status_to_string(status: i32) -> Option<&'static str> {
 //     // Ensure there is enough capacity for both existing and new items
 //     if dest.items.len() + src.len() > dest.items.capacity() {
 //         log_error!("Not enough capacity to copy items");
-//         return Err(MenderError::Failed);
+//         return Err(MenderStatus::Failed);
 //     }
 
 //     // Copy all items from source
@@ -316,7 +342,7 @@ pub fn mender_utils_http_status_to_string(status: i32) -> Option<&'static str> {
 //         dest.items.push(KeyStoreItem {
 //             name: item.name.clone(),
 //             value: item.value.clone(),
-//         }).map_err(|_| MenderError::Failed)?;
+//         }).map_err(|_| MenderStatus::Failed)?;
 //     }
 
 //     Ok(())
