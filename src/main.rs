@@ -316,6 +316,10 @@ async fn connection(
 ) {
     log::info!("start connection task");
     log::info!("Device capabilities: {:?}", controller.capabilities());
+    log::info!("turn off power saving mode");
+    controller
+        .set_power_saving(esp_wifi::config::PowerSaveMode::None)
+        .unwrap();
     loop {
         if esp_wifi::wifi::wifi_state() == WifiState::StaConnected {
             // wait until we're no longer connected

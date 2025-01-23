@@ -3,6 +3,8 @@ runner = "espflash flash --monitor -T ./partitions.csv --erase-parts otadata"
 
 [env]
 ESP_LOG="INFO"
+# with "true" - it makes WiFi/BLE performance worse
+ESP_WIFI_CONFIG_PHY_ENABLE_USB = "false"
 
 [build]
 rustflags = [
