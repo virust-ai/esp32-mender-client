@@ -201,7 +201,7 @@ async fn main(spawner: Spawner) -> ! {
         identity,
         "artifact-1.0",
         "esp32c6",
-        env!("MENDER_CLIENT_URL"),
+        option_env!("MENDER_CLIENT_URL").unwrap_or("https://mender.bluleap.ai"),
         tenant_token,
     )
         .with_recommissioning(false);
