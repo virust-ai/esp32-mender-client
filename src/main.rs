@@ -44,8 +44,8 @@ use mender_mcu_client::{
 mod custom;
 mod global_variables;
 
-const WIFI_SSID: &str = "Your SSID";
-const WIFI_PSK: &str = "Your PSK";
+const WIFI_SSID: &str = env!("MENDER_CLIENT_WIFI_SSID");
+const WIFI_PSK: &str = env!("MENDER_CLIENT_WIFI_PSK");
 
 macro_rules! mk_static {
     ($t:ty,$val:expr) => {{
@@ -196,31 +196,15 @@ async fn main(spawner: Spawner) -> ! {
         store
     };
 
-    // let config = MenderClientConfig::new(
-    //     identity,
-    //     "artifact-1.0",
-    //     "esp32c6",
-    //     "https://hosted.mender.io",
-    //     Some("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJtZW5kZXIudGVuYW50IjoiNjVkODMyYjNkY2I2ODI1YmQ2OWJjZGRmIiwiaXNzIjoiTWVuZGVyIiwic3ViIjoiNjVkODMyYjNkY2I2ODI1YmQ2OWJjZGRmIn0.oPgY1QLpvMlNJzc9_ZVbrNlWpAvqtZXXHWilw6kVZD-0HZQNZGt4nXbvOFrekfbgU7zHfK9N6ovqWffa7MjqFjceEfbpagYASchFcuqRZPBGTc5MBUmF0YZWzvaw0pBYLK5sakUiEVoAvQJsSdy75NcipTlHneaB96y5WoPBdP7fkdRb0UIWBIHi4O5ZFwDYgaP5SJBj9i-akoIvqnTsZjGfATUuqpNIErnE4yPwn0Rf2CgIdrgl2daTZAwFB0lbHC_Xm2IT5LjbODdTvtnJyVfYoIpU0Bn34YoCl538sPbzIsyArIit8D3uQ8aeviUiyXt857dSbSBE6wHV0gsJMxjBQZApFaYIH4FEk7g2PEV5Q3Fo0-TcL6BXrE10u3DDOMZbspLrqozq_eVfWth6aa_5fNlKIoZeesuwd4QJlviwUSRnCBdN2W-Elu8bhKSfRRmLPX5RL6g_BMyrM-wvcV96kFobZy52IZuMIjAex3I3p7gCu4IxWGB1KrxnmJPi")
-    // ).with_recommissioning(false);
-
-    // let config = MenderClientConfig::new(
-    //     identity,
-    //     "artifact-1.0",
-    //     "esp32c6",
-    //     "https://mender.bluleap.ai",
-    //     None,
-    // )
-    // .with_recommissioning(false);
-
+    let tenant_token = option_env!("MENDER_CLIENT_TENANT_TOKEN");
     let config = MenderClientConfig::new(
         identity,
         "artifact-1.0",
         "esp32c6",
-        "https://mender-s.ionmobility.com",
-        None,
+        option_env!("MENDER_CLIENT_URL").unwrap_or("https://mender.bluleap.ai"),
+        tenant_token,
     )
-    .with_recommissioning(false);
+        .with_recommissioning(false);
 
     // Creating an instance:
     let callbacks = MenderClientCallbacks::new(
@@ -242,7 +226,7 @@ async fn main(spawner: Spawner) -> ! {
         Some(&INVENTORY_CONFIG), // Use the static config
         None,
     )
-    .await
+        .await
     {
         Ok(_) => {
             log_info!("Mender inventory add-on registered successfully");
@@ -282,7 +266,7 @@ async fn main(spawner: Spawner) -> ! {
     let inventory = [
         KeyStoreItem {
             name: HString::<32>::try_from("mender-mcu-client").unwrap(),
-            value: HString::<32>::try_from("1.0.0").unwrap(), // Replace with actual version
+            value: HString::<32>::try_from(env!("CARGO_PKG_VERSION")).unwrap(),
         },
         KeyStoreItem {
             name: HString::<32>::try_from("latitude").unwrap(),

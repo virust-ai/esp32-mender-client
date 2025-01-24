@@ -270,11 +270,7 @@ pub async fn mender_client_init(
     log::info!("Identity contents: {:?}", saved_config.identity);
 
     // Handle host configuration
-    saved_config.host = if !config.host.is_empty() {
-        config.host.clone()
-    } else {
-        CONFIG_MENDER_SERVER_HOST.to_string()
-    };
+    saved_config.host = config.host.clone();
 
     // Validate host configuration
     if saved_config.host.is_empty() {
@@ -287,26 +283,7 @@ pub async fn mender_client_init(
         return Err(MenderStatus::Other);
     }
 
-    // Handle tenant token
-    saved_config.tenant_token = match &config.tenant_token {
-        Some(token) if !token.is_empty() => Some(token.to_string()),
-        _ => {
-            // If no token provided or empty, use default
-            // if !CONFIG_MENDER_SERVER_TENANT_TOKEN.is_empty() {
-            //     Some(CONFIG_MENDER_SERVER_TENANT_TOKEN.to_string())
-            // } else {
-            //     None
-            // }
-            Some(CONFIG_MENDER_SERVER_TENANT_TOKEN.to_string())
-        }
-    };
-
-    // If token is empty string, set to None
-    if let Some(token) = &saved_config.tenant_token {
-        if token.is_empty() {
-            saved_config.tenant_token = None;
-        }
-    }
+    saved_config.tenant_token = config.tenant_token.clone();
 
     // Set default poll intervals
     if config.authentication_poll_interval != 0 {
