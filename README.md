@@ -30,6 +30,14 @@ It is build and test on esp32-c6 for now.
 - 🔌 **ESP32 Development Board**  
 - 🌐 **Mender Server Account** (Hosted or Open Source)
 
+Configure environment variables:
+
+```shell
+MENDER_CLIENT_WIFI_SSID
+MENDER_CLIENT_WIFI_PSK
+MENDER_CLIENT_URL
+MENDER_CLIENT_TENANT_TOKEN (optional)
+```
 ---
 
 ### 🚀 Installation & Setup

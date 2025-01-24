@@ -196,28 +196,13 @@ async fn main(spawner: Spawner) -> ! {
         store
     };
 
-    // let config = MenderClientConfig::new(
-    //     identity,
-    //     "artifact-1.0",
-    //     "esp32c6",
-    //     "https://hosted.mender.io",
-    //     Some("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJtZW5kZXIudGVuYW50IjoiNjVkODMyYjNkY2I2ODI1YmQ2OWJjZGRmIiwiaXNzIjoiTWVuZGVyIiwic3ViIjoiNjVkODMyYjNkY2I2ODI1YmQ2OWJjZGRmIn0.oPgY1QLpvMlNJzc9_ZVbrNlWpAvqtZXXHWilw6kVZD-0HZQNZGt4nXbvOFrekfbgU7zHfK9N6ovqWffa7MjqFjceEfbpagYASchFcuqRZPBGTc5MBUmF0YZWzvaw0pBYLK5sakUiEVoAvQJsSdy75NcipTlHneaB96y5WoPBdP7fkdRb0UIWBIHi4O5ZFwDYgaP5SJBj9i-akoIvqnTsZjGfATUuqpNIErnE4yPwn0Rf2CgIdrgl2daTZAwFB0lbHC_Xm2IT5LjbODdTvtnJyVfYoIpU0Bn34YoCl538sPbzIsyArIit8D3uQ8aeviUiyXt857dSbSBE6wHV0gsJMxjBQZApFaYIH4FEk7g2PEV5Q3Fo0-TcL6BXrE10u3DDOMZbspLrqozq_eVfWth6aa_5fNlKIoZeesuwd4QJlviwUSRnCBdN2W-Elu8bhKSfRRmLPX5RL6g_BMyrM-wvcV96kFobZy52IZuMIjAex3I3p7gCu4IxWGB1KrxnmJPi")
-    // ).with_recommissioning(false);
-
-    // let config = MenderClientConfig::new(
-    //     identity,
-    //     "artifact-1.0",
-    //     "esp32c6",
-    //     "https://mender.bluleap.ai",
-    //     None,
-    // )
-    // .with_recommissioning(false);
+    let tenant_token = option_env!("MENDER_CLIENT_TENANT_TOKEN");
     let config = MenderClientConfig::new(
         identity,
         "artifact-1.0",
         "esp32c6",
         env!("MENDER_CLIENT_URL"),
-        None,
+        tenant_token,
     )
         .with_recommissioning(false);
 
