@@ -12,10 +12,10 @@ use embassy_sync::mutex::Mutex;
 
 use super::mender_inventory_api;
 
-const CONFIG_MENDER_CLIENT_INVENTORY_REFRESH_INTERVAL: u64 = 28800;
+const CONFIG_MENDER_CLIENT_INVENTORY_REFRESH_INTERVAL: u32 = 28800;
 
 pub struct MenderInventoryConfig {
-    pub refresh_interval: u64,
+    pub refresh_interval: u32,
 }
 
 // Global static variables
@@ -63,7 +63,7 @@ pub async fn mender_inventory_init(
     let mut work_handle = MENDER_INVENTORY_WORK_HANDLE.lock().await;
     match mender_scheduler::mender_scheduler_work_create(
         mender_inventory_work,
-        conf.as_ref().unwrap().refresh_interval as i32,
+        conf.as_ref().unwrap().refresh_interval,
         "mender_inventory",
     )
     .await

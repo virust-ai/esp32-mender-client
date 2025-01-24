@@ -26,7 +26,7 @@ pub type MenderFuture = Pin<Box<dyn Future<Output = MenderStatus> + 'static>>;
 #[derive(Clone)]
 pub struct MenderSchedulerWorkParams {
     pub function: fn() -> MenderFuture,
-    pub period: i32, // seconds, negative or zero disables periodic execution
+    pub period: u32, // seconds, negative or zero disables periodic execution
     pub name: String<MAX_NAME_LENGTH>,
 }
 
@@ -46,7 +46,7 @@ pub enum SchedulerCommand {
     AddWork(MenderSchedulerWorkContext),
     RemoveWork(String<MAX_NAME_LENGTH>),
     RemoveAllWorks,
-    SetPeriod(String<MAX_NAME_LENGTH>, i32), // Just name and period
+    SetPeriod(String<MAX_NAME_LENGTH>, u32), // Just name and period
 }
 
 // Static instances for synchronization and communication
@@ -70,7 +70,7 @@ pub struct Scheduler {
 impl MenderSchedulerWorkParams {
     pub fn new(
         function: fn() -> MenderFuture,
-        period: i32,
+        period: u32,
         name: &str,
     ) -> Result<Self, &'static str> {
         let mut fixed_name = String::new();
@@ -164,7 +164,7 @@ impl MenderSchedulerWorkContext {
 
     /// Set the period for periodic execution
     #[allow(dead_code)]
-    async fn set_period(&mut self, period: i32) -> MenderStatus {
+    async fn set_period(&mut self, period: u32) -> MenderStatus {
         //let _lock = WORK_STATUS_MUTEX.lock().await;
         self.params.period = period;
         println!("Work '{}' period set to {}s", self.params.name, period);
@@ -294,7 +294,7 @@ pub fn mender_scheduler_init(spawner: Spawner) -> Result<(), &'static str> {
 /// Create a new work
 pub async fn mender_scheduler_work_create(
     function: fn() -> MenderFuture,
-    period: i32,
+    period: u32,
     name: &'static str,
 ) -> Result<MenderSchedulerWorkContext, &'static str> {
     log_info!("mender_scheduler_work_create", "name" => name);
@@ -322,7 +322,7 @@ pub async fn mender_scheduler_work_deactivate(
 /// Set the period of a work
 pub async fn mender_scheduler_work_set_period(
     work: &mut MenderSchedulerWorkContext,
-    period: i32,
+    period: u32,
 ) -> Result<(), &'static str> {
     //work.set_period(period).await
     let mut fixed_name = String::new();

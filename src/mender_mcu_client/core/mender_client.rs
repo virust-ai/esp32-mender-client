@@ -33,8 +33,11 @@ use crate::mender_mcu_client::platform::tls::mender_tls;
 use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::vec::Vec;
 use core::future::Future;
-pub const CONFIG_MENDER_AUTH_POLL_INTERVAL: i32 = 60; // default 600;
-pub const CONFIG_MENDER_UPDATE_POLL_INTERVAL: i32 = 1800; // default 1800;
+
+pub const CONFIG_MENDER_SERVER_HOST: &str = "https://mender.bluleap.ai";
+pub const CONFIG_MENDER_AUTH_POLL_INTERVAL: u32 = 60; // default 600;
+pub const CONFIG_MENDER_UPDATE_POLL_INTERVAL: u32 = 1800; // default 1800;
+pub const CONFIG_MENDER_SERVER_TENANT_TOKEN: &str = "";
 
 #[derive(Debug, Clone)]
 pub struct MenderClientConfig {
@@ -43,8 +46,8 @@ pub struct MenderClientConfig {
     pub device_type: String,
     pub host: String,
     pub tenant_token: Option<String>,
-    pub authentication_poll_interval: i32,
-    pub update_poll_interval: i32,
+    pub authentication_poll_interval: u32,
+    pub update_poll_interval: u32,
     pub recommissioning: bool,
 }
 
@@ -75,13 +78,13 @@ impl MenderClientConfig {
     }
 
     #[allow(dead_code)]
-    pub fn with_auth_interval(mut self, interval: i32) -> Self {
+    pub fn with_auth_interval(mut self, interval: u32) -> Self {
         self.authentication_poll_interval = interval;
         self
     }
 
     #[allow(dead_code)]
-    pub fn with_update_interval(mut self, interval: i32) -> Self {
+    pub fn with_update_interval(mut self, interval: u32) -> Self {
         self.update_poll_interval = interval;
         self
     }
