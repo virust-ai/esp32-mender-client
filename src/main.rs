@@ -44,8 +44,8 @@ use mender_mcu_client::{
 mod custom;
 mod global_variables;
 
-const WIFI_SSID: &str = "Your SSID";
-const WIFI_PSK: &str = "Your PSK";
+const WIFI_SSID: &str = env!("MENDER_CLIENT_WIFI_SSID");
+const WIFI_PSK: &str = env!("MENDER_CLIENT_WIFI_PSK");
 
 macro_rules! mk_static {
     ($t:ty,$val:expr) => {{
@@ -212,15 +212,14 @@ async fn main(spawner: Spawner) -> ! {
     //     None,
     // )
     // .with_recommissioning(false);
-
     let config = MenderClientConfig::new(
         identity,
         "artifact-1.0",
         "esp32c6",
-        "https://mender-s.ionmobility.com",
+        env!("MENDER_CLIENT_URL"),
         None,
     )
-    .with_recommissioning(false);
+        .with_recommissioning(false);
 
     // Creating an instance:
     let callbacks = MenderClientCallbacks::new(
@@ -242,7 +241,7 @@ async fn main(spawner: Spawner) -> ! {
         Some(&INVENTORY_CONFIG), // Use the static config
         None,
     )
-    .await
+        .await
     {
         Ok(_) => {
             log_info!("Mender inventory add-on registered successfully");
@@ -282,7 +281,7 @@ async fn main(spawner: Spawner) -> ! {
     let inventory = [
         KeyStoreItem {
             name: HString::<32>::try_from("mender-mcu-client").unwrap(),
-            value: HString::<32>::try_from("1.0.0").unwrap(), // Replace with actual version
+            value: HString::<32>::try_from(env!("CARGO_PKG_VERSION")).unwrap(),
         },
         KeyStoreItem {
             name: HString::<32>::try_from("latitude").unwrap(),
