@@ -14,10 +14,10 @@ use embassy_sync::mutex::Mutex;
 use heapless::FnvIndexMap;
 
 // Constants
-const CONFIG_MENDER_CLIENT_CONFIGURE_REFRESH_INTERVAL: u64 = 28800;
+const CONFIG_MENDER_CLIENT_CONFIGURE_REFRESH_INTERVAL: u32 = 28800;
 
 pub struct MenderConfigureConfig {
-    pub refresh_interval: u64,
+    pub refresh_interval: u32,
 }
 
 pub struct MenderConfigureCallbacks {
@@ -79,7 +79,7 @@ pub async fn mender_configure_init(
     let mut work_handle = MENDER_CONFIGURE_WORK_HANDLE.lock().await;
     match mender_scheduler::mender_scheduler_work_create(
         mender_configure_work,
-        conf.as_ref().unwrap().refresh_interval as i32,
+        conf.as_ref().unwrap().refresh_interval,
         "mender_configure",
     )
     .await
