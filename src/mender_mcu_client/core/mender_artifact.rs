@@ -153,7 +153,12 @@ pub async fn mender_artifact_process_data(
     // Copy data to the end of the internal buffer
     if let Some(data) = input_data {
         if input_length > 0 {
-            if ctx.input.data.extend_from_slice(&data[..input_length]).is_err() {
+            if ctx
+                .input
+                .data
+                .extend_from_slice(&data[..input_length])
+                .is_err()
+            {
                 log_error!("Failed to extend input data buffer");
                 return Err(MenderStatus::Failed);
             }
@@ -477,7 +482,9 @@ pub async fn mender_artifact_read_header_info(ctx: &mut MenderArtifactContext) -
     if mender_artifact_shift_data(
         ctx,
         mender_artifact_round_up(ctx.file.size, MENDER_ARTIFACT_STREAM_BLOCK_SIZE),
-    ).is_err() {
+    )
+    .is_err()
+    {
         log_error!("Unable to shift input data");
         return Err(MenderStatus::Failed);
     }

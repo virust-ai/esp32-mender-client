@@ -292,15 +292,15 @@ pub async fn mender_configure_execute() -> MenderResult<()> {
 
 #[allow(dead_code)]
 pub async fn mender_configure_download_artifact_callback(
-   // _id: &str,
+    // _id: &str,
     artifact_name: &str,
-   // _type: &str,
+    // _type: &str,
     meta_data: Option<&str>,
-   // _filename: &str,
-   // _size: usize,
-   // _data: &[u8],
-   // _index: usize,
-   // _length: usize,
+    // _filename: &str,
+    // _size: usize,
+    // _data: &[u8],
+    // _index: usize,
+    // _length: usize,
 ) -> MenderResult<()> {
     use crate::mender_mcu_client::platform::storage::mender_storage;
 

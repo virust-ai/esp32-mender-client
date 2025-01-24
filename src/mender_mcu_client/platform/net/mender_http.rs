@@ -16,9 +16,7 @@ use embassy_net::{dns::DnsQueryType, tcp::TcpSocket, IpAddress, Stack};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embedded_io_async::Write;
-use embedded_tls::{
-    Aes128GcmSha256, TlsConfig, TlsConnection, TlsContext, UnsecureProvider,
-};
+use embedded_tls::{Aes128GcmSha256, TlsConfig, TlsConnection, TlsContext, UnsecureProvider};
 use heapless::FnvIndexMap;
 
 const HTTP_RECV_BUF_LENGTH: usize = 1024 + 512;

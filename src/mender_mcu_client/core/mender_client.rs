@@ -231,11 +231,7 @@ impl MenderArtifactCallback for FlashCallback {
                 // artifact_name,
                 // type_name,
                 // meta_data,
-                filename,
-                size,
-                data,
-                index,
-                length,
+                filename, size, data, index, length,
             )
             .await
         })
@@ -632,8 +628,7 @@ async fn mender_client_work_function() -> MenderStatus {
 
         if let Some(mut w) = work_context {
             log_info!("mender_client_work_function: setting work period", "period" => period);
-            if (mender_scheduler::mender_scheduler_work_set_period(&mut w, period).await).is_err()
-            {
+            if (mender_scheduler::mender_scheduler_work_set_period(&mut w, period).await).is_err() {
                 log_error!("Unable to set work period");
                 return MenderStatus::Other;
             }

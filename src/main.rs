@@ -204,7 +204,7 @@ async fn main(spawner: Spawner) -> ! {
         option_env!("MENDER_CLIENT_URL").unwrap_or("https://mender.bluleap.ai"),
         tenant_token,
     )
-        .with_recommissioning(false);
+    .with_recommissioning(false);
 
     // Creating an instance:
     let callbacks = MenderClientCallbacks::new(
@@ -226,7 +226,7 @@ async fn main(spawner: Spawner) -> ! {
         Some(&INVENTORY_CONFIG), // Use the static config
         None,
     )
-        .await
+    .await
     {
         Ok(_) => {
             log_info!("Mender inventory add-on registered successfully");
