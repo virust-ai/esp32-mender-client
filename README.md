@@ -5,6 +5,8 @@ A **pure Rust** implementation of the Mender client for the ESP32 platform, desi
 It is build and test on esp32-c6 for now.
 ![image](https://github.com/user-attachments/assets/b33603c2-42bd-4634-ac8f-c4ab864c722e)
 
+<img width="1468" alt="image" src="https://github.com/user-attachments/assets/31c2c963-585a-4074-b28d-a693922ed45e" />
+
 ---
 
 ## 🔥 Key Features
