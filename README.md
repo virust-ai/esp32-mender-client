@@ -55,3 +55,7 @@ MENDER_CLIENT_TENANT_TOKEN (optional)
   ```bash
   cargo build
   cargo run
+```
+
+# Further Discussioin on Discord
+Please join us : https://discord.gg/b7vk6fza
