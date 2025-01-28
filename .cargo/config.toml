@@ -1,5 +1,5 @@
 [target.riscv32imac-unknown-none-elf]
-runner = "./flash.bat target/riscv32imac-unknown-none-elf/debug/esp32-mender-client"
+runner = "espflash flash --monitor -T ./partitions.csv --erase-parts otadata"
 
 [env]
 ESP_LOG="INFO"
