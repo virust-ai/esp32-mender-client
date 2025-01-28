@@ -34,10 +34,8 @@ use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::vec::Vec;
 use core::future::Future;
 
-pub const CONFIG_MENDER_SERVER_HOST: &str = "https://mender.bluleap.ai";
 pub const CONFIG_MENDER_AUTH_POLL_INTERVAL: u32 = 60; // default 600;
 pub const CONFIG_MENDER_UPDATE_POLL_INTERVAL: u32 = 1800; // default 1800;
-pub const CONFIG_MENDER_SERVER_TENANT_TOKEN: &str = "";
 
 #[derive(Debug, Clone)]
 pub struct MenderClientConfig {
