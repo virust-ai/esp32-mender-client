@@ -1,6 +1,9 @@
 on: [push, pull_request]
 
 name: CI
+env:
+  MENDER_CLIENT_WIFI_SSID=""
+  MENDER_CLIENT_WIFI_PSK=""
 
 jobs:
   build:
