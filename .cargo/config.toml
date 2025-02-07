@@ -1,11 +1,9 @@
 [target.riscv32imac-unknown-none-elf]
-runner = "./flash.bat target/riscv32imac-unknown-none-elf/debug/esp32-mender-client"
+runner = "espflash flash --monitor -T ./partitions.csv --erase-parts otadata"
 
 [env]
 ESP_LOG="INFO"
 ESP_WIFI_CONFIG_PHY_ENABLE_USB = "false"
-MENDER_CLIENT_WIFI_SSID = "ssid"
-MENDER_CLIENT_WIFI_PSK = "psk"
 
 [build]
 rustflags = [
