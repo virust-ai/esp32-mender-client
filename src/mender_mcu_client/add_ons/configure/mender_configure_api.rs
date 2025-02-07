@@ -4,7 +4,7 @@ use crate::mender_mcu_client::core::mender_api::{
 };
 use crate::mender_mcu_client::core::mender_utils::{KeyStore, MenderResult, MenderStatus};
 use crate::mender_mcu_client::platform::net::mender_http::{
-    self, HttpMethod, MenderHttpResponseData,
+    self, HttpMethod, HttpRequestParams, MenderHttpResponseData,
 };
 use heapless::String as HString;
 use serde_json_core::de::from_str;
@@ -24,17 +24,17 @@ pub async fn mender_configure_api_download_configuration_data() -> MenderResult<
 
     // Perform HTTP request
     let (_, jwt) = mender_api_get_authentication_token().await?;
-    let ret = mender_http::mender_http_perform(
-        Some(&jwt),
-        MENDER_API_PATH_GET_DEVICE_CONFIGURATION,
-        HttpMethod::Get,
-        None,
-        None,
-        &my_text_callback,
-        &mut response_data,
-        &mut status,
-        None,
-    )
+    let ret = mender_http::mender_http_perform(HttpRequestParams {
+        jwt: Some(&jwt),
+        path: MENDER_API_PATH_GET_DEVICE_CONFIGURATION,
+        method: HttpMethod::Get,
+        payload: None,
+        signature: None,
+        callback: &my_text_callback,
+        response_data: &mut response_data,
+        status: &mut status,
+        params: None,
+    })
     .await;
 
     if ret.is_err() {
@@ -82,17 +82,17 @@ pub async fn mender_configure_api_publish_configuration_data(
 
     // Perform HTTP request
     let (_, jwt) = mender_api_get_authentication_token().await?;
-    let ret = mender_http::mender_http_perform(
-        Some(&jwt),
-        MENDER_API_PATH_PUT_DEVICE_CONFIGURATION,
-        HttpMethod::Put,
-        Some(&payload),
-        None,
-        &my_text_callback,
-        &mut response_data,
-        &mut status,
-        None,
-    )
+    let ret = mender_http::mender_http_perform(HttpRequestParams {
+        jwt: Some(&jwt),
+        path: MENDER_API_PATH_PUT_DEVICE_CONFIGURATION,
+        method: HttpMethod::Put,
+        payload: Some(&payload),
+        signature: None,
+        callback: &my_text_callback,
+        response_data: &mut response_data,
+        status: &mut status,
+        params: None,
+    })
     .await;
 
     if ret.is_err() {

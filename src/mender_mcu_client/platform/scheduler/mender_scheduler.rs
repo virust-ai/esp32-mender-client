@@ -149,10 +149,14 @@ impl MenderSchedulerWorkContext {
 
     /// Deactivate the work
     async fn deactivate(&mut self) -> MenderStatus {
-        //let _lock = WORK_STATUS_MUTEX.lock().await;
         if self.activated {
-            while self.is_executing {
-                Timer::after(Duration::from_millis(10)).await;
+            if self.is_executing {
+                loop {
+                    Timer::after(Duration::from_millis(10)).await;
+                    if !self.is_executing {
+                        break;
+                    }
+                }
             }
             self.activated = false;
             println!("Work '{}' deactivated", self.params.name);

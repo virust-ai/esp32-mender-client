@@ -3,33 +3,30 @@ use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
 
+// Add this type alias at the module level
+pub type InitFuture = Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
+
 pub struct MenderAddonInstance<C: 'static, CB: 'static> {
     /// Invoked to initialize the add-on
-    pub init: fn(
-        config: Option<&'static C>,
-        callbacks: Option<&'static CB>,
-    ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>,
+    pub init: fn(config: Option<&'static C>, callbacks: Option<&'static CB>) -> InitFuture,
 
     /// Invoked to activate the add-on
-    pub activate: fn() -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>,
+    pub activate: fn() -> InitFuture,
 
     /// Invoked to deactivate the add-on
-    pub deactivate: fn() -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>,
+    pub deactivate: fn() -> InitFuture,
 
     /// Invoked to cleanup the add-on
-    pub exit: fn() -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>,
+    pub exit: fn() -> InitFuture,
 }
 
 pub trait MenderAddon: Send + Sync {
     #[allow(dead_code)]
-    fn init(
-        &self,
-        config: Option<&'static ()>,
-        callbacks: Option<&'static ()>,
-    ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
-    fn activate(&self) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
-    fn deactivate(&self) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
-    fn exit(&self) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'static>>;
+    fn init(&self, config: Option<&'static ()>, callbacks: Option<&'static ()>) -> InitFuture;
+
+    fn activate(&self) -> InitFuture;
+    fn deactivate(&self) -> InitFuture;
+    fn exit(&self) -> InitFuture;
 }
 
 impl<C: 'static, CB: 'static> MenderAddon for MenderAddonInstance<C, CB> {

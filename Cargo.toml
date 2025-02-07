@@ -37,24 +37,28 @@ rand_core = "0.6.4"
 crc = "3.2.1"
 base64 = { version = "0.22.1", default-features = false }
 sha2 = { version = "0.10.8", default-features = false }
+digest = "0.10.7"
 esp-storage = { version = "0.4.0" , features = [ "esp32c6" ] }
 embedded-storage = "0.3.1"
 serde = { version = "1.0.217", default-features = false, features = ["derive"] }
 embedded-websocket = { version = "0.9.4", default-features = false }
+#esp-hal-ota = { version = "0.3.2", features = [ "esp32c6" ] }
 
 [profile.dev]
 # Rust debug is too slow.
 # For debug builds always builds with some optimization
 opt-level = "s"
 
+
 [profile.release]
-codegen-units = 1 # LLVM can perform better optimizations using a single thread
+codegen-units = 16
 debug = 2
 debug-assertions = false
 incremental = false
 lto = 'fat'
 opt-level = 's'
 overflow-checks = false
+panic = "abort"
 
 [features]
 default = ["mender_client_configure_storage"]

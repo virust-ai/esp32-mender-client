@@ -4,28 +4,23 @@ use core::pin::Pin;
 
 use crate::mender_mcu_client::core::mender_utils::MenderResult;
 
-// #[derive(Debug, serde::Deserialize)]
-// pub struct JsonResponse<'a> {
-//     pub text: &'a str,
-// }
-
-// impl<'a> JsonResponse<'a> {
-//     pub fn as_str(&self) -> &str {
-//         self.text
-//     }
-// }
+// Create a struct to hold the parameters
+pub struct MenderCallbackInfo<'a> {
+    pub type_str: Option<&'a str>,
+    pub meta: Option<&'a str>,
+    pub file: Option<&'a str>,
+    pub size: usize,
+    pub data: &'a [u8],
+    pub offset: usize,
+    pub total: usize,
+    pub chksum: &'a [u8],
+}
 
 // Define a trait for the callback to make it more flexible
 pub trait MenderCallback {
     fn call<'a>(
         &'a self,
-        type_str: Option<&'a str>,
-        meta: Option<&'a str>,
-        file: Option<&'a str>,
-        size: usize,
-        data: &'a [u8],
-        offset: usize,
-        total: usize,
+        mender_callback_info: MenderCallbackInfo<'a>,
     ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'a>>;
 }
 
@@ -42,5 +37,6 @@ pub trait MenderArtifactCallback: Sync {
         data: &'a [u8],
         index: usize,
         length: usize,
+        chksum: &'a [u8],
     ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'a>>;
 }

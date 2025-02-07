@@ -1,30 +1,61 @@
 use crate::alloc::string::ToString;
+use crate::external::esp_hal_ota::Ota;
+use crate::external::esp_hal_ota::OtaImgState;
 use crate::mender_mcu_client::core::mender_utils::MenderResult;
 use crate::mender_mcu_client::core::mender_utils::MenderStatus;
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::string::String;
+use core::fmt;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
+use esp_storage::FlashStorage;
 
 // Mock flash state
 static FLASH_HANDLE: Mutex<CriticalSectionRawMutex, Option<FlashHandle>> = Mutex::new(None);
 
-#[derive(Debug)]
 struct FlashHandle {
     filename: String,
     size: usize,
     current_position: usize,
+    ota: Ota<FlashStorage>,
 }
 
-pub async fn mender_flash_open(filename: &str, size: usize) -> MenderResult<()> {
+// Implement custom Debug that skips the ota field
+impl fmt::Debug for FlashHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FlashHandle")
+            .field("filename", &self.filename)
+            .field("size", &self.size)
+            .field("current_position", &self.current_position)
+            .finish()
+    }
+}
+
+pub async fn mender_flash_open(filename: &str, size: usize, chksum: &[u8]) -> MenderResult<()> {
     log_info!("mender_flash_open", "filename" => filename, "size" => size);
     let mut handle = FLASH_HANDLE.lock().await;
 
     // Check if flash is already open
     if handle.is_some() {
         log_error!("Flash already open");
-        return Ok((MenderStatus::Ok, ()));
+        return Err(MenderStatus::Failed);
+    }
+
+    // Initialize OTA
+    let mut ota = match Ota::new(FlashStorage::new()) {
+        Ok(ota) => ota,
+        Err(e) => {
+            log_error!("Failed to create OTA instance", "error" => e);
+            return Err(MenderStatus::Failed);
+        }
+    };
+
+    // Begin OTA update
+    // Note: target_crc is set to 0 initially, it will be updated later if needed
+    if let Err(e) = ota.ota_begin(size as u32, chksum) {
+        log_error!("Failed to begin OTA", "error" => e);
+        return Err(MenderStatus::Failed);
     }
 
     // Create new flash handle
@@ -32,13 +63,14 @@ pub async fn mender_flash_open(filename: &str, size: usize) -> MenderResult<()> 
         filename: filename.to_string(),
         size,
         current_position: 0,
+        ota,
     });
 
     log_info!("Opened flash for :", "filename" => filename, "size" => size);
     Ok((MenderStatus::Ok, ()))
 }
 
-pub async fn mender_flash_write(_data: &[u8], index: usize, length: usize) -> MenderResult<()> {
+pub async fn mender_flash_write(data: &[u8], index: usize, length: usize) -> MenderResult<()> {
     log_info!("mender_flash_write", "index" => index, "length" => length);
     let mut handle = FLASH_HANDLE.lock().await;
 
@@ -59,15 +91,14 @@ pub async fn mender_flash_write(_data: &[u8], index: usize, length: usize) -> Me
         return Err(MenderStatus::Failed);
     }
 
+    // Write data using OTA
+    if let Err(e) = flash.ota.ota_write_chunk(data, length) {
+        log_error!("Failed to write OTA chunk", "error" => e);
+        return Err(MenderStatus::Failed);
+    }
+
     // Update position
     flash.current_position += length;
-
-    log_info!(
-        "Writing to flash: ",
-        "length" => length,
-        "index" => index,
-        "flash.filename" => flash.filename
-    );
 
     Ok((MenderStatus::Ok, ()))
 }
@@ -76,13 +107,10 @@ pub async fn mender_flash_close() -> MenderResult<()> {
     log_info!("mender_flash_close");
     let mut handle = FLASH_HANDLE.lock().await;
 
-    if handle.is_none() {
+    let flash = handle.as_mut().ok_or_else(|| {
         log_error!("Flash not open");
-        return Err(MenderStatus::Failed);
-    }
-
-    // Get the handle before clearing it
-    let flash = handle.as_ref().unwrap();
+        MenderStatus::Failed
+    })?;
 
     // Verify all data was written
     if flash.current_position != flash.size {
@@ -100,8 +128,12 @@ pub async fn mender_flash_close() -> MenderResult<()> {
         "flash.filename" => flash.filename
     );
 
-    // Clear the handle
-    *handle = None;
+    // Flush and finalize OTA
+    // verify=false because we'll verify later, reboot=true to apply the update
+    if let Err(e) = flash.ota.ota_flush(true) {
+        log_error!("Failed to flush OTA", "error" => e);
+        return Err(MenderStatus::Failed);
+    }
 
     Ok((MenderStatus::Ok, ()))
 }
@@ -110,8 +142,11 @@ pub async fn mender_flash_abort_deployment() -> MenderResult<()> {
     log_info!("mender_flash_abort_deployment");
     let mut handle = FLASH_HANDLE.lock().await;
 
-    if handle.is_some() {
-        log_info!("Aborting flash deployment");
+    if let Some(flash) = handle.as_mut() {
+        if let Err(e) = flash.ota.ota_abort() {
+            log_error!("Failed to abort OTA", "error" => e);
+        }
+        // No need to explicitly abort OTA - it will be cleaned up when the handle is dropped
         *handle = None;
     }
 
@@ -120,6 +155,58 @@ pub async fn mender_flash_abort_deployment() -> MenderResult<()> {
 
 pub async fn mender_flash_set_pending_image() -> MenderResult<()> {
     log_info!("mender_flash_set_pending_image");
-    // Temporary mock implementation
+    // The OTA update is already set to pending during flash_close
+    let mut handle = FLASH_HANDLE.lock().await;
+
+    if let Some(flash) = handle.as_mut() {
+        // Verify all data was written
+        if flash.current_position != flash.size {
+            log_error!(
+                "Incomplete write: ",
+                "flash.current_position" => flash.current_position,
+                "flash.size" => flash.size
+            );
+            return Err(MenderStatus::Failed);
+        }
+
+        if let Err(e) = flash.ota.ota_set_pending_image(true) {
+            log_error!("Failed to set pending image", "error" => e);
+        }
+        *handle = None;
+    }
     Ok((MenderStatus::Ok, ()))
+}
+
+pub fn mender_flash_confirm_image() -> MenderResult<()> {
+    log_info!("mender_flash_confirm_image");
+
+    let mut ota = match Ota::new(FlashStorage::new()) {
+        Ok(ota) => ota,
+        Err(e) => {
+            log_error!("Failed to create OTA instance", "error" => e);
+            return Err(MenderStatus::Failed);
+        }
+    };
+
+    if let Err(e) = ota.ota_mark_app_valid() {
+        log_error!("Failed to mark app valid", "error" => e);
+        return Err(MenderStatus::Failed);
+    }
+
+    Ok((MenderStatus::Ok, ()))
+}
+
+#[allow(dead_code)]
+pub fn mender_flash_is_image_confirmed() -> bool {
+    log_info!("mender_flash_is_image_confirmed");
+    let mut ota = match Ota::new(FlashStorage::new()) {
+        Ok(ota) => ota,
+        Err(e) => {
+            log_error!("Failed to create OTA instance", "error" => e);
+            return false;
+        }
+    };
+
+    let image_state = ota.get_ota_image_state();
+    matches!(image_state, Ok(OtaImgState::EspOtaImgValid))
 }
