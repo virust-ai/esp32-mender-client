@@ -3,6 +3,15 @@
 
 extern crate alloc;
 
+mod custom;
+mod global_variables;
+mod external {
+    pub mod esp_hal_ota {
+        // Include the contents of lib.rs here
+        include!("external/esp_hal_ota/lib.rs");
+    }
+}
+
 use alloc::boxed::Box;
 use alloc::format;
 use embassy_executor::Spawner;
@@ -13,6 +22,7 @@ use esp_backtrace as _;
 use esp_hal::efuse::Efuse;
 use esp_hal::{clock::CpuClock, rng::Trng, timer::timg::TimerGroup};
 use esp_println::println;
+use esp_storage::FlashStorage;
 use esp_wifi::{
     init,
     wifi::{
@@ -21,8 +31,13 @@ use esp_wifi::{
     },
     EspWifiController,
 };
+
+use external::esp_hal_ota::OtaImgState;
 use heapless::String as HString;
+use mender_mcu_client::platform::flash::mender_flash::mender_flash_confirm_image;
+use mender_mcu_client::platform::flash::mender_flash::mender_flash_is_image_confirmed;
 mod mender_mcu_client;
+use crate::external::esp_hal_ota::Ota;
 use crate::mender_mcu_client::add_ons::inventory::mender_inventory::{
     MenderInventoryConfig, MENDER_INVENTORY_ADDON_INSTANCE,
 };
@@ -40,9 +55,6 @@ use mender_mcu_client::{
         mender_scheduler_work_set_period, MenderFuture,
     },
 };
-
-mod custom;
-mod global_variables;
 
 const WIFI_SSID: &str = env!("MENDER_CLIENT_WIFI_SSID");
 const WIFI_PSK: &str = env!("MENDER_CLIENT_WIFI_PSK");
@@ -71,25 +83,38 @@ fn network_release_cb() -> MenderResult<()> {
 
 fn authentication_success_cb() -> MenderResult<()> {
     log_info!("authentication_success_cb");
-    // Implementation
+
+    /* Validate the image if it is still pending */
+    /* Note it is possible to do multiple diagnosic tests before validating the image */
+    /* In this example, authentication success with the mender-server is enough */
+    if let Err(e) = mender_flash_confirm_image() {
+        log_error!("Failed to confirm image", "error" => e);
+        return Err(MenderStatus::Failed);
+    }
     Ok((MenderStatus::Ok, ()))
 }
 
 fn authentication_failure_cb() -> MenderResult<()> {
     log_info!("authentication_failure_cb");
-    // Implementation
+
+    if !mender_flash_is_image_confirmed() {
+        log_error!("Image is not confirmed");
+        return Err(MenderStatus::Failed);
+    }
     Ok((MenderStatus::Ok, ()))
 }
 
-fn deployment_status_cb(_status: DeploymentStatus, _message: Option<&str>) -> MenderResult<()> {
-    log_info!("deployment_status_cb");
-    // Implementation
+fn deployment_status_cb(_status: DeploymentStatus, message: Option<&str>) -> MenderResult<()> {
+    log_info!("deployment_status_cb", "status" => _status, "message" => message.unwrap_or(""));
+
     Ok((MenderStatus::Ok, ()))
 }
 
 fn restart_cb() -> MenderResult<()> {
     log_info!("restart_cb");
-    // Implementation
+
+    esp_hal::reset::software_reset();
+
     Ok((MenderStatus::Ok, ()))
 }
 
@@ -137,7 +162,7 @@ async fn main(spawner: Spawner) -> ! {
     let config = embassy_net::Config::dhcpv4(Default::default());
 
     let seed = (trng.rng.random() as u64) << 32 | trng.rng.random() as u64;
-
+    println!("Test version 1.0");
     // // Init network stack
     // let stack = &*mk_static!(
     //     Stack<WifiDevice<'_, WifiStaDevice>>,
@@ -155,6 +180,32 @@ async fn main(spawner: Spawner) -> ! {
         mk_static!(StackResources<3>, StackResources::<3>::new()),
         seed,
     );
+
+    let mut ota = match Ota::new(FlashStorage::new()) {
+        Ok(ota) => ota,
+        Err(e) => {
+            log_error!("Failed to create OTA instance", "error" => e);
+            panic!("Failed to create OTA instance");
+        }
+    };
+
+    // Log current partition info
+    if let Some(part) = ota.get_currently_booted_partition() {
+        log_info!(
+            "Running from partition",
+            "partition" => format_args!("ota_{}", part),
+            "base" => format_args!("0x{:x}", if part == 0 { 0x10000 } else { 0x1c0000 })
+        );
+    }
+
+    // Verify partition state
+    if let Ok(state) = ota.get_ota_image_state() {
+        if state != OtaImgState::EspOtaImgValid {
+            log_warn!("Current partition not marked as valid");
+            // Optionally mark as valid if needed
+            //let _ = ota.ota_mark_app_valid();
+        }
+    }
 
     spawner
         .spawn(connection(controller))

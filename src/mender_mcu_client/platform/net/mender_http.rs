@@ -16,7 +16,9 @@ use embassy_net::{dns::DnsQueryType, tcp::TcpSocket, IpAddress, Stack};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embedded_io_async::Write;
-use embedded_tls::{Aes128GcmSha256, TlsConfig, TlsConnection, TlsContext, UnsecureProvider};
+use embedded_tls::{
+    Aes128GcmSha256, TlsConfig, TlsConnection, TlsContext, TlsError, UnsecureProvider,
+};
 use heapless::FnvIndexMap;
 
 const HTTP_RECV_BUF_LENGTH: usize = 1024 + 512;
@@ -84,6 +86,18 @@ pub struct MenderHttpConfig {
     pub host: String,
 }
 
+pub struct HttpRequestParams<'a> {
+    pub jwt: Option<&'a str>,
+    pub path: &'a str,
+    pub method: HttpMethod,
+    pub payload: Option<&'a str>,
+    pub signature: Option<&'a str>,
+    pub callback: &'a dyn HttpCallback,
+    pub response_data: &'a mut MenderHttpResponseData,
+    pub status: &'a mut i32,
+    pub params: Option<&'a (dyn MenderCallback + Send + Sync)>,
+}
+
 // Initialize function
 pub async fn mender_http_init(
     config: &MenderHttpConfig,
@@ -106,6 +120,51 @@ static ROOT_CERT: &str = "-----BEGIN CERTIFICATE-----\nMIIEdTCCA12gAwIBAgIJAKcOS
 static CLOUDFLARE_CERT: &str = "-----BEGIN CERTIFICATE-----\nMIICeDCCAh6gAwIBAgIUdGybb97s1RnCo5wAqwmD2GCHHIMwCgYIKoZIzj0EAwIw\nRDFCMEAGA1UEAww5YzI3MTk2NGQ0MTc0OWZlYjEwZGE3NjI4MTZjOTUyZWUucjIu\nY2xvdWRmbGFyZXN0b3JhZ2UuY29tMB4XDTI1MDExNzA4MzczNloXDTM1MDExNTA4\nMzczNlowRDFCMEAGA1UEAww5YzI3MTk2NGQ0MTc0OWZlYjEwZGE3NjI4MTZjOTUy\nZWUucjIuY2xvdWRmbGFyZXN0b3JhZ2UuY29tMFkwEwYHKoZIzj0CAQYIKoZIzj0D\nAQcDQgAEUFtDg9i9xk78cLEd1xHgoswretxau5hP1bQzAfj7D/AG/650xUJ9n9Qa\naktj851Je6fnG1CBfTbUPOP2Gp08jqOB7TCB6jAdBgNVHQ4EFgQUJQHTo0teO/K8\nc1iZoP1L6Wm7R8gwHwYDVR0jBBgwFoAUJQHTo0teO/K8c1iZoP1L6Wm7R8gwDwYD\nVR0TAQH/BAUwAwEB/zATBgNVHSUEDDAKBggrBgEFBQcDATCBgQYDVR0RBHoweII5\nYzI3MTk2NGQ0MTc0OWZlYjEwZGE3NjI4MTZjOTUyZWUucjIuY2xvdWRmbGFyZXN0\nb3JhZ2UuY29tgjsqLmMyNzE5NjRkNDE3NDlmZWIxMGRhNzYyODE2Yzk1MmVlLnIy\nLmNsb3VkZmxhcmVzdG9yYWdlLmNvbTAKBggqhkjOPQQDAgNIADBFAiEAq9mHtH1w\nrc+1jq3F0TwuiYQH8XcgwRJa8GuLWvw4XP0CIEaIaZ4vXxbrvYH4NqUq4BAFlnce\nJO5o1YPe3GlJvdwI\n-----END CERTIFICATE-----";
 
 static ION_CERT: &str = "-----BEGIN CERTIFICATE-----\nMIIB8zCCAZmgAwIBAgIUPs7cEUjaCnOQz3eV5nljyj3jskowCgYIKoZIzj0EAwIw\nIzEhMB8GA1UEAwwYbWVuZGVyLXMuaW9ubW9iaWxpdHkuY29tMB4XDTIzMTAwOTEw\nMzYzN1oXDTMzMTAwNjEwMzYzN1owIzEhMB8GA1UEAwwYbWVuZGVyLXMuaW9ubW9i\naWxpdHkuY29tMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIuRIXhcEijAbfGWY\niOcmLyNgghyX15U2U0oxfKu4DsBSl1I6z/2byfICbaklMZctHnPwadEcKd4D+4D/\nnWLBv6OBqjCBpzAdBgNVHQ4EFgQUlupnfE/paWI4xIQ3O21bfdms4fYwHwYDVR0j\nBBgwFoAUlupnfE/paWI4xIQ3O21bfdms4fYwDwYDVR0TAQH/BAUwAwEB/zATBgNV\nHSUEDDAKBggrBgEFBQcDATA/BgNVHREEODA2ghhtZW5kZXItcy5pb25tb2JpbGl0\neS5jb22CGioubWVuZGVyLXMuaW9ubW9iaWxpdHkuY29tMAoGCCqGSM49BAMCA0gA\nMEUCIA/pNz8YCWCXBpdjXmGWfsAMK6y3wAEqLz6jXjBlZTZuAiEA/7/2MeuDJuBG\nOtuZUxkEyhRtZ25shuwU0u92qLc/QYE=\n-----END CERTIFICATE-----";
+
+async fn try_dns_query(stack: &Stack<'static>, host: &str) -> Result<IpAddress, MenderStatus> {
+    const DNS_RETRY_COUNT: u8 = 3;
+    const DNS_TIMEOUT_SECS: u64 = 5;
+
+    for attempt in 0..DNS_RETRY_COUNT {
+        if attempt > 0 {
+            log_info!("Retrying DNS query", "attempt" => attempt + 1);
+            // Add delay between retries
+            embassy_time::Timer::after(embassy_time::Duration::from_millis(500)).await;
+        }
+
+        match embassy_time::with_timeout(
+            embassy_time::Duration::from_secs(DNS_TIMEOUT_SECS),
+            stack.dns_query(host, DnsQueryType::A),
+        )
+        .await
+        {
+            Ok(Ok(addrs)) => {
+                if let Some(&addr) = addrs.first() {
+                    log_info!("DNS query successful",
+                        "host" => host,
+                        "addr" => addr,
+                        "attempt" => attempt + 1
+                    );
+                    return Ok(addr);
+                }
+            }
+            Ok(Err(e)) => {
+                log_error!("DNS query failed",
+                    "error" => format_args!("{:?}", e),
+                    "attempt" => attempt + 1
+                );
+            }
+            Err(_) => {
+                log_error!("DNS query timeout",
+                    "attempt" => attempt + 1
+                );
+            }
+        }
+    }
+
+    log_error!("All DNS query attempts failed", "host" => host);
+    Err(MenderStatus::Network)
+}
 
 // Connect function
 pub async fn connect_to_host<'a>(
@@ -146,23 +205,9 @@ pub async fn connect_to_host<'a>(
         log_info!("Using cached connection info", "host" => host);
         cached_addr
     } else {
-        // DNS lookup with timeout
-        let resolved_addr = *embassy_time::with_timeout(
-            embassy_time::Duration::from_secs(15), // 15 second timeout
-            stack.dns_query(host, DnsQueryType::A),
-        )
-        .await
-        .map_err(|_| {
-            log_error!("DNS query timeout");
-            MenderStatus::Other
-        })?
-        .map_err(|_| MenderStatus::Other)?
-        .first()
-        .ok_or(MenderStatus::Other)?;
-
-        // Cache the new connection info
+        log_info!("Starting DNS query for host", "host" => host);
+        let resolved_addr = try_dns_query(&stack, host).await?;
         cache_conn_info(host.to_string(), resolved_addr).await;
-
         resolved_addr
     };
 
@@ -305,31 +350,21 @@ enum TransferEncoding {
     Unknown,
 }
 
-pub async fn mender_http_perform<'a>(
-    jwt: Option<&str>,
-    path: &str,
-    method: HttpMethod,
-    payload: Option<&str>,
-    signature: Option<&str>,
-    callback: &'a dyn HttpCallback,
-    response_data: &mut MenderHttpResponseData,
-    status: &mut i32,
-    params: Option<&'a (dyn MenderCallback + Send + Sync)>,
-) -> Result<(), MenderStatus> {
+pub async fn mender_http_perform(params: HttpRequestParams<'_>) -> Result<(), MenderStatus> {
     const MAX_RETRIES: u8 = 3;
     let mut retry_count = 0;
 
     while retry_count < MAX_RETRIES {
         match try_http_request(
-            jwt,
-            path,
-            method,
-            payload,
-            signature,
-            callback,
-            response_data,
-            status,
-            params,
+            params.jwt,
+            params.path,
+            params.method,
+            params.payload,
+            params.signature,
+            params.callback,
+            params.response_data,
+            params.status,
+            params.params,
         )
         .await
         {
@@ -365,6 +400,7 @@ pub async fn mender_http_perform<'a>(
 }
 
 // Update perform function with better error handling and data management
+#[allow(clippy::too_many_arguments)]
 async fn try_http_request<'a>(
     jwt: Option<&str>,
     path: &str,
@@ -411,9 +447,10 @@ async fn try_http_request<'a>(
 
     // Check if this is a download request (GET method with specific paths)
     let is_download = matches!(method, HttpMethod::Get)
-        && (path.contains("/download")
-            || path.contains("/artifacts")
-            || path.contains("cloudflarestorage.com"));
+        && (path.contains("download")
+            || path.contains("artifacts")
+            || path.contains("cloudflarestorage.com")
+            || path.contains("mender-artifact-storage"));
 
     log_info!("is_download", "is_download" => is_download);
 
@@ -545,7 +582,7 @@ async fn try_http_request<'a>(
                             headers_done = true;
 
                             if parsed_status == 204 {
-                                log_info!("Received 204 No Content");
+                                //log_info!("Received 204 No Content");
                                 callback
                                     .call(
                                         HttpClientEvent::DataReceived,
@@ -790,32 +827,43 @@ async fn try_http_request<'a>(
                     log_error!("TLS read error", "error" => e);
 
                     let _ = tls_conn.close().await;
-                    if let Some(length) = content_length {
-                        if bytes_received < length {
-                            log_warn!("Incomplete data received, retrying...",
-                                "received" => bytes_received,
-                                "total" => length
-                            );
-                            retry_count += 1;
-                            embassy_time::Timer::after(embassy_time::Duration::from_millis(
-                                RETRY_DELAY_MS * (2_u64.pow(retry_count)),
-                            ))
-                            .await;
-                            continue 'retry_loop;
-                        } else {
-                            log_info!("Response complete");
+
+                    match e {
+                        TlsError::ConnectionClosed => {
+                            log_info!("Connection closed by server");
                             break 'retry_loop;
                         }
-                    } else {
-                        if !is_download {
-                            return Err(MenderStatus::Network);
+                        _ => {
+                            if let Some(length) = content_length {
+                                if bytes_received < length {
+                                    log_warn!("Incomplete data received, retrying...",
+                                        "received" => bytes_received,
+                                        "total" => length
+                                    );
+                                    retry_count += 1;
+                                    embassy_time::Timer::after(
+                                        embassy_time::Duration::from_millis(
+                                            RETRY_DELAY_MS * (2_u64.pow(retry_count)),
+                                        ),
+                                    )
+                                    .await;
+                                    continue 'retry_loop;
+                                } else {
+                                    log_info!("Response complete");
+                                    break 'retry_loop;
+                                }
+                            } else {
+                                if !is_download {
+                                    return Err(MenderStatus::Network);
+                                }
+                                retry_count += 1;
+                                embassy_time::Timer::after(embassy_time::Duration::from_millis(
+                                    RETRY_DELAY_MS * (2_u64.pow(retry_count)),
+                                ))
+                                .await;
+                                continue 'retry_loop;
+                            }
                         }
-                        retry_count += 1;
-                        embassy_time::Timer::after(embassy_time::Duration::from_millis(
-                            RETRY_DELAY_MS * (2_u64.pow(retry_count)),
-                        ))
-                        .await;
-                        continue 'retry_loop;
                     }
                 }
                 Err(_) => {

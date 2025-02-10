@@ -1,6 +1,6 @@
 //use alloc::string::String;
 use crate::{
-    custom::mender_common::MenderCallback,
+    custom::mender_common::{MenderCallback, MenderCallbackInfo},
     mender_mcu_client::core::mender_utils::{self, MenderResult, MenderStatus},
 };
 #[allow(unused_imports)]
@@ -11,7 +11,7 @@ use alloc::string::ToString;
 use heapless::{String as HString, Vec as HVec};
 use serde::Deserialize;
 
-const MAX_STRING_PAYLOADS: usize = 20;
+const MAX_STRING_PAYLOADS: usize = 40;
 
 #[derive(Debug, Clone, Copy)]
 pub enum MenderArtifactStreamState {
@@ -23,6 +23,7 @@ pub enum MenderArtifactStreamState {
 pub struct MenderArtifactPayload {
     #[serde(rename = "type")]
     pub payload_type: HString<MAX_STRING_PAYLOADS>, // Type of the payload
+    pub checksum: HString<64>, // Make sure this is 64 to match RootfsImageProvides
     pub meta_data: Option<JsonResponse>, // Meta-data from header tarball
 }
 
@@ -122,6 +123,26 @@ pub struct ArtifactDepends {
     pub device_type: HVec<HString<MAX_STRING_PAYLOADS>, 1>, // Array with single device type
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct TypeInfo {
+    #[serde(rename = "type")]
+    pub type_name: HString<MAX_STRING_PAYLOADS>,
+    pub artifact_provides: RootfsImageProvides,
+    #[allow(dead_code)]
+    pub clears_artifact_provides: HVec<HString<MAX_STRING_PAYLOADS>, 4>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct RootfsImageProvides {
+    #[serde(rename = "rootfs-image.checksum")]
+    #[serde(alias = "module-image.checksum")]
+    pub checksum: HString<64>, // For SHA-256 hash
+
+    #[serde(rename = "rootfs-image.version")]
+    #[serde(alias = "module-image.version")]
+    pub version: HString<MAX_STRING_PAYLOADS>,
+}
+
 impl MenderArtifactContext {
     pub fn new() -> Self {
         Self {
@@ -171,7 +192,7 @@ pub async fn mender_artifact_process_data(
     loop {
         let status = match ctx.stream_state {
             MenderArtifactStreamState::ParsingHeader => {
-                log_info!("parsing header");
+                //log_info!("parsing header");
                 // Parse TAR header
                 match mender_artifact_parse_tar_header(ctx).await? {
                     (MenderStatus::Done, _) => MenderStatus::Done,
@@ -179,7 +200,7 @@ pub async fn mender_artifact_process_data(
                 }
             }
             MenderArtifactStreamState::ParsingData => {
-                log_info!("parsing data");
+                //log_info!("parsing data");
                 // Treatment depending on the file name
                 let status = match ctx.file.name.as_str() {
                     "version" => {
@@ -197,6 +218,15 @@ pub async fn mender_artifact_process_data(
                         }
                     }
                     name if name.starts_with("header.tar/headers")
+                        && name.ends_with("type-info") =>
+                    {
+                        log_info!("parsing type-info");
+                        match mender_artifact_read_type_info(ctx).await? {
+                            (MenderStatus::Done, _) => MenderStatus::Done,
+                            (status, _) => status,
+                        }
+                    }
+                    name if name.starts_with("header.tar/headers")
                         && name.ends_with("meta-data") =>
                     {
                         log_info!("parsing data meta");
@@ -206,21 +236,21 @@ pub async fn mender_artifact_process_data(
                         }
                     }
                     name if name.starts_with("data") => {
-                        log_info!("parsing data data");
+                        //log_info!("parsing data data");
                         match mender_artifact_read_data(ctx, callback).await? {
                             (MenderStatus::Done, _) => MenderStatus::Done,
                             (status, _) => status,
                         }
                     }
                     name if !name.ends_with(".tar") => {
-                        log_info!("parsing data tar");
+                        //log_info!("parsing data tar");
                         match mender_artifact_drop_file(ctx).await? {
                             (MenderStatus::Done, _) => MenderStatus::Done,
                             (status, _) => status,
                         }
                     }
                     _ => {
-                        log_info!("Nothing to do");
+                        //log_info!("Nothing to do");
                         MenderStatus::Done
                     }
                 };
@@ -228,7 +258,7 @@ pub async fn mender_artifact_process_data(
                 if status != MenderStatus::Done {
                     status
                 } else {
-                    log_info!("parsing done");
+                    //log_info!("parsing done");
                     // Remove the previous file name using mender_utils_strrstr
                     if let Some(substring) =
                         mender_utils::mender_utils_strrstr(&ctx.file.name, ".tar")
@@ -263,7 +293,7 @@ pub async fn mender_artifact_process_data(
 
 impl Drop for MenderArtifactContext {
     fn drop(&mut self) {
-        log::info!("Dropping MenderArtifactContext");
+        log_info!("Dropping MenderArtifactContext");
 
         // All memory will be automatically freed:
         // - Vec<u8> in input.data
@@ -285,7 +315,7 @@ pub async fn mender_artifact_parse_tar_header(ctx: &mut MenderArtifactContext) -
 
     // Check if file name is provided, else the end of the current TAR file is reached
     if tar_header.name[0] == b'\0' {
-        log_info!("parsing header 1");
+        //log_info!("parsing header 1");
         // Check if enough data are received (at least 2 blocks)
         if ctx.input.length < 2 * MENDER_ARTIFACT_STREAM_BLOCK_SIZE {
             return Ok((MenderStatus::Ok, ()));
@@ -293,25 +323,25 @@ pub async fn mender_artifact_parse_tar_header(ctx: &mut MenderArtifactContext) -
 
         // Remove the TAR file name
         if !ctx.file.name.is_empty() {
-            log_info!("parsing header 2");
+            //log_info!("parsing header 2");
             if let Some(substring) = mender_utils::mender_utils_strrstr(&ctx.file.name, ".tar") {
-                log_info!("parsing header 3");
+                //log_info!("parsing header 3");
                 let pos = ctx.file.name.len() - substring.len();
                 ctx.file.name.truncate(pos);
 
                 if mender_utils::mender_utils_strrstr(&ctx.file.name, ".tar").is_some() {
-                    log_info!("parsing header 4");
+                    //log_info!("parsing header 4");
                     // Keep the .tar and truncate after it
                     let new_len = pos + ".tar".len();
                     if new_len <= ctx.file.name.len() {
                         ctx.file.name.truncate(new_len);
                     }
                 } else {
-                    log_info!("parsing header 5");
+                    //log_info!("parsing header 5");
                     ctx.file.name.clear();
                 }
             } else {
-                log_info!("parsing header 6");
+                //log_info!("parsing header 6");
                 ctx.file.name.clear();
             }
         }
@@ -361,7 +391,7 @@ pub async fn mender_artifact_parse_tar_header(ctx: &mut MenderArtifactContext) -
     ctx.file.size = usize::from_str_radix(size_str, 8).map_err(|_| MenderStatus::Failed)?;
     ctx.file.index = 0;
 
-    log_info!("file size", "size" => ctx.file.size);
+    //log_info!("file size", "size" => ctx.file.size);
     log_info!("file name", "name" => ctx.file.name.as_str());
 
     // Shift data in the buffer
@@ -470,6 +500,7 @@ pub async fn mender_artifact_read_header_info(ctx: &mut MenderArtifactContext) -
         .values
         .push(MenderArtifactPayload {
             payload_type: header_info.payloads[0].payload_type.clone(),
+            checksum: HString::new(),
             meta_data: None,
         })
         .is_err()
@@ -490,6 +521,97 @@ pub async fn mender_artifact_read_header_info(ctx: &mut MenderArtifactContext) -
     }
 
     Ok((MenderStatus::Done, ())) // MenderStatus::Done
+}
+
+pub async fn mender_artifact_read_type_info(ctx: &mut MenderArtifactContext) -> MenderResult<()> {
+    // Check if all data have been received
+    if ctx.input.data.is_empty()
+        || ctx.input.length
+            < mender_artifact_round_up(ctx.file.size, MENDER_ARTIFACT_STREAM_BLOCK_SIZE)
+    {
+        return Ok((MenderStatus::Ok, ()));
+    }
+
+    let json_str = match core::str::from_utf8(&ctx.input.data[..ctx.file.size]) {
+        Ok(s) => {
+            log_info!("Type-info JSON string",
+                "content" => s,
+                "length" => s.len()
+            );
+            s
+        }
+        Err(e) => {
+            log_error!("Invalid UTF-8 in type-info",
+                "error" => e,
+                "size" => ctx.file.size
+            );
+            return Err(MenderStatus::Failed);
+        }
+    };
+
+    // Try parsing with more detailed error handling
+    match serde_json_core::from_str::<TypeInfo>(json_str) {
+        Ok((type_info, bytes_read)) => {
+            log_info!("Successfully parsed type-info",
+                "bytes_read" => bytes_read,
+                "type_name" => type_info.type_name.as_str(),
+                "checksum" => type_info.artifact_provides.checksum.as_str(),
+                "version" => type_info.artifact_provides.version.as_str()
+            );
+
+            // Verify that the type matches the payload type from header-info
+            // Extract index from filename (similar to meta-data)
+            let index = {
+                let name = &ctx.file.name;
+                if !name.starts_with("header.tar/headers/") || !name.ends_with("/type-info") {
+                    log_error!("Invalid artifact format");
+                    return Err(MenderStatus::Failed);
+                }
+
+                let start = "header.tar/headers/".len();
+                let end = name[start..].find('/').ok_or_else(|| {
+                    log_error!("Invalid artifact format");
+                    MenderStatus::Failed
+                })?;
+
+                let index_str = &name[start..start + end];
+                let index = index_str.parse::<usize>().map_err(|_| {
+                    log_error!("Invalid artifact format");
+                    MenderStatus::Failed
+                })?;
+
+                if index >= ctx.payloads.size {
+                    log_error!("Invalid artifact format");
+                    return Err(MenderStatus::Failed);
+                }
+                index
+            };
+
+            ctx.payloads.values[index].checksum = type_info.artifact_provides.checksum;
+            log_info!("type-info checksum", "checksum" => ctx.payloads.values[index].checksum.as_str());
+
+            // Shift data in the buffer
+            if mender_artifact_shift_data(
+                ctx,
+                mender_artifact_round_up(ctx.file.size, MENDER_ARTIFACT_STREAM_BLOCK_SIZE),
+            )
+            .is_err()
+            {
+                log_error!("Unable to shift input data");
+                return Err(MenderStatus::Failed);
+            }
+
+            Ok((MenderStatus::Done, ()))
+        }
+        Err(e) => {
+            log_error!("JSON parse error details",
+                "error" => e,
+                "json_content" => json_str,
+                "size" => ctx.file.size
+            );
+            Err(MenderStatus::Failed)
+        }
+    }
 }
 
 pub async fn mender_artifact_read_meta_data(ctx: &mut MenderArtifactContext) -> MenderResult<()> {
@@ -588,7 +710,7 @@ pub async fn mender_artifact_read_data(
     ctx: &mut MenderArtifactContext,
     callback: Option<&(dyn MenderCallback + Send + Sync)>,
 ) -> MenderResult<()> {
-    log_info!("mender_artifact_read_data");
+    //log_info!("mender_artifact_read_data");
     // Retrieve payload index using string operations
     let index = {
         let name = &ctx.file.name;
@@ -608,7 +730,7 @@ pub async fn mender_artifact_read_data(
             return Err(MenderStatus::Failed);
         };
 
-        log_info!("index", "index" => index, "size" => ctx.payloads.size);
+        //log_info!("index", "index" => index, "size" => ctx.payloads.size);
         if index >= ctx.payloads.size {
             log_error!("Invalid artifact format - index out of range");
             return Err(MenderStatus::Failed);
@@ -628,15 +750,16 @@ pub async fn mender_artifact_read_data(
                 .unwrap_or("");
 
             callback_fn
-                .call(
-                    Some(&ctx.payloads.values[index].payload_type),
-                    Some(meta_data_str),
-                    None,
-                    0,
-                    b"",
-                    0,
-                    0,
-                )
+                .call(MenderCallbackInfo {
+                    type_str: Some(&ctx.payloads.values[index].payload_type),
+                    meta: Some(meta_data_str),
+                    file: None,
+                    size: 0,
+                    data: b"",
+                    offset: 0,
+                    total: 0,
+                    chksum: ctx.payloads.values[index].checksum.as_bytes(),
+                })
                 .await?;
 
             return Ok((MenderStatus::Done, ()));
@@ -657,7 +780,7 @@ pub async fn mender_artifact_read_data(
     while ctx.file.index < ctx.file.size {
         // Check if enough data are received (at least one block)
         if ctx.input.data.is_empty() || ctx.input.length < MENDER_ARTIFACT_STREAM_BLOCK_SIZE {
-            log_info!("mender_artifact_read_data: Nothing to do");
+            //log_info!("mender_artifact_read_data: Nothing to do");
             return Ok((MenderStatus::Ok, ()));
         }
 
@@ -682,15 +805,16 @@ pub async fn mender_artifact_read_data(
                 .unwrap_or(""); // Default to empty string if no meta_data
 
             callback_fn
-                .call(
-                    Some(&ctx.payloads.values[index].payload_type),
-                    Some(meta_data_str),
-                    Some(filename),
-                    ctx.file.size,
-                    &ctx.input.data,
-                    ctx.file.index,
-                    block_length,
-                )
+                .call(MenderCallbackInfo {
+                    type_str: Some(&ctx.payloads.values[index].payload_type),
+                    meta: Some(meta_data_str),
+                    file: Some(filename),
+                    size: ctx.file.size,
+                    data: &ctx.input.data,
+                    offset: ctx.file.index,
+                    total: block_length,
+                    chksum: ctx.payloads.values[index].checksum.as_bytes(),
+                })
                 .await?;
         } else {
             log_error!("Invalid callback");

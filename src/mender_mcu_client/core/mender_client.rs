@@ -23,7 +23,7 @@ use heapless::{String as HString, Vec as HVec};
 use serde::{Deserialize, Serialize};
 use serde_json_core::de::from_str;
 
-use crate::custom::mender_common::{MenderArtifactCallback, MenderCallback};
+use crate::custom::mender_common::{MenderArtifactCallback, MenderCallback, MenderCallbackInfo};
 use crate::mender_mcu_client::platform::flash::mender_flash;
 use crate::mender_mcu_client::platform::scheduler::mender_scheduler;
 use crate::mender_mcu_client::platform::storage::mender_storage;
@@ -222,6 +222,7 @@ impl MenderArtifactCallback for FlashCallback {
         data: &'a [u8],
         index: usize,
         length: usize,
+        chksum: &'a [u8],
     ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'a>> {
         Box::pin(async move {
             mender_client_download_artifact_flash_callback(
@@ -229,7 +230,7 @@ impl MenderArtifactCallback for FlashCallback {
                 // artifact_name,
                 // type_name,
                 // meta_data,
-                filename, size, data, index, length,
+                filename, size, data, index, length, chksum,
             )
             .await
         })
@@ -322,7 +323,7 @@ pub async fn mender_client_init(
     if mender_client_register_artifact_type(
         "rootfs-image",
         &FLASH_CALLBACK,
-        true,
+        false,
         &saved_config.artifact_name,
     )
     .await
@@ -611,6 +612,9 @@ async fn mender_client_work_function() -> MenderStatus {
     if *state == MenderClientState::Authentication {
         // Perform authentication with the server
         if let Err(e) = mender_client_authentication_work_function().await {
+            if let Err(release_err) = mender_client_network_release().await {
+                return release_err;
+            }
             return e;
         }
 
@@ -628,6 +632,9 @@ async fn mender_client_work_function() -> MenderStatus {
             log_info!("mender_client_work_function: setting work period", "period" => period);
             if (mender_scheduler::mender_scheduler_work_set_period(&mut w, period).await).is_err() {
                 log_error!("Unable to set work period");
+                if let Err(release_err) = mender_client_network_release().await {
+                    return release_err;
+                }
                 return MenderStatus::Other;
             }
         }
@@ -642,7 +649,7 @@ async fn mender_client_work_function() -> MenderStatus {
         // Perform updates
         mender_client_update_work_function().await
     } else {
-        MenderStatus::Done
+        MenderStatus::Ok
     }
 }
 
@@ -677,13 +684,13 @@ async fn mender_client_initialization_work_function() -> MenderResult<()> {
                     log_info!("Successfully parsed deployment data", "deployment" => deployment);
                 }
                 Err(e) => {
-                    log::error!("Failed to parse deployment data: {:?}", e);
+                    log_error!("Failed to parse deployment data: ", "error" => e);
                     mender_storage::mender_storage_delete_deployment_data().await?;
 
                     let callbacks = MENDER_CLIENT_CALLBACKS.lock().await;
                     if let Some(cb) = callbacks.as_ref() {
                         if let Err(e) = (cb.restart)() {
-                            log::error!("Restart callback failed: {:?}", e);
+                            log_error!("Restart callback failed: ", "error" => e);
                             return Err(e);
                         }
                     }
@@ -701,7 +708,7 @@ async fn mender_client_initialization_work_function() -> MenderResult<()> {
             let callbacks = MENDER_CLIENT_CALLBACKS.lock().await;
             if let Some(cb) = callbacks.as_ref() {
                 if let Err(e) = (cb.restart)() {
-                    log::error!("Restart callback failed: {:?}", e);
+                    log_error!("Restart callback failed: ", "error" => e);
                     return Err(e);
                 }
             }
@@ -709,7 +716,7 @@ async fn mender_client_initialization_work_function() -> MenderResult<()> {
         }
     }
 
-    Ok((MenderStatus::Ok, ()))
+    Ok((MenderStatus::Done, ()))
 }
 
 pub struct MyDownLoad;
@@ -717,17 +724,18 @@ pub struct MyDownLoad;
 impl MenderCallback for MyDownLoad {
     fn call<'a>(
         &'a self,
-        type_str: Option<&'a str>,
-        meta: Option<&'a str>,
-        file: Option<&'a str>,
-        size: usize,
-        data: &'a [u8],
-        index: usize,
-        length: usize,
+        info: MenderCallbackInfo<'a>,
     ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'a>> {
         Box::pin(async move {
             mender_client_download_artifact_callback(
-                type_str, meta, file, size, data, index, length,
+                info.type_str,
+                info.meta,
+                info.file,
+                info.size,
+                info.data,
+                info.offset,
+                info.total,
+                info.chksum,
             )
             .await
         })
@@ -802,6 +810,10 @@ async fn mender_client_update_work_function() -> MenderStatus {
         Err(e) => {
             log_error!("Unable to download artifact");
             mender_client_publish_deployment_status(&id, DeploymentStatus::Failure).await;
+            {
+                let mut deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
+                *deployment = None;
+            }
             let needs_set_pending_image = MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE
                 .lock()
                 .await;
@@ -825,6 +837,10 @@ async fn mender_client_update_work_function() -> MenderStatus {
         if let Err(e) = mender_flash::mender_flash_set_pending_image().await {
             log_error!("Unable to set boot partition");
             mender_client_publish_deployment_status(&id, DeploymentStatus::Failure).await;
+            {
+                let mut deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
+                *deployment = None;
+            }
             return e;
         }
     }
@@ -833,21 +849,36 @@ async fn mender_client_update_work_function() -> MenderStatus {
     let needs_restart = MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART.lock().await;
     if *needs_restart {
         // Save deployment data
-        let deployment_str: heapless::String<256> =
-            match serde_json_core::to_string(&deployment_data) {
-                Ok(str) => str,
-                Err(_) => return MenderStatus::Failed,
-            };
+        let deployment_str: heapless::String<256> = {
+            let deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
+            if let Some(deployment) = deployment.as_ref() {
+                match serde_json_core::to_string(&deployment) {
+                    Ok(str) => str,
+                    Err(_) => return MenderStatus::Failed,
+                }
+            } else {
+                return MenderStatus::Failed;
+            }
+        };
 
         match mender_storage::mender_storage_set_deployment_data(&deployment_str).await {
             Ok(_) => (),
             Err(e) => {
                 log_error!("Unable to save deployment data");
                 mender_client_publish_deployment_status(&id, DeploymentStatus::Failure).await;
+                {
+                    let mut deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
+                    *deployment = None;
+                }
                 return e;
             }
         }
         mender_client_publish_deployment_status(&id, DeploymentStatus::Rebooting).await;
+
+        {
+            let mut deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
+            *deployment = None;
+        }
 
         // Get callbacks and trigger restart
         let callbacks = MENDER_CLIENT_CALLBACKS.lock().await;
@@ -860,6 +891,10 @@ async fn mender_client_update_work_function() -> MenderStatus {
     } else {
         // Publish success if no restart needed
         mender_client_publish_deployment_status(&id, DeploymentStatus::Success).await;
+        {
+            let mut deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
+            *deployment = None;
+        }
     }
 
     MenderStatus::Done
@@ -885,6 +920,7 @@ async fn mender_client_publish_deployment_status(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn mender_client_download_artifact_callback(
     artifact_type: Option<&str>,
     meta_data: Option<&str>,
@@ -893,44 +929,20 @@ async fn mender_client_download_artifact_callback(
     data: &[u8],
     index: usize,
     length: usize,
+    chksum: &[u8],
 ) -> MenderResult<()> {
     log_info!("mender_client_download_artifact_callback",
-        "artifact_type" => artifact_type.unwrap_or(""),
-        "meta_data" => meta_data.unwrap_or(""),
-        "filename" => filename.unwrap_or(""),
+        // "artifact_type" => artifact_type.unwrap_or(""),
+
+        // "meta_data" => meta_data.unwrap_or(""),
+        // "filename" => filename.unwrap_or(""),
         "size" => size,
         "index" => index,
         "length" => length
     );
 
-    // Get deployment data with logging
-    //log_info!("Getting deployment data");
-    let mut deployment_data = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
-    let deployment = match deployment_data.as_ref() {
-        Some(d) => {
-            //log_info!("Found deployment data");
-            d
-        }
-        None => {
-            log_error!("No deployment data available");
-            return Err(MenderStatus::Failed);
-        }
-    };
-
-    // Get artifact types list with logging
-    //log_info!("Getting artifact types");
     let artifact_types = MENDER_CLIENT_ARTIFACT_TYPES.lock().await;
-    //log_info!("Got artifact types");
-    if let Some(types_list) = artifact_types.as_ref() {
-        let type_names: String = types_list
-            .iter()
-            .map(|t| t.type_name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        log_info!("Registered artifact types", "types" => type_names, "deployment_id" => deployment.id.as_str());
-    } else {
-        log_info!("No artifact types registered");
-    }
+
     // Check if we have any registered types
     if let Some(types_list) = artifact_types.as_ref() {
         //log_info!("mender_client_download_artifact_callback: types_list");
@@ -939,16 +951,6 @@ async fn mender_client_download_artifact_callback(
             //log_info!("mender_client_download_artifact_callback: artifact_handler", "artifact_handler.type_name" => artifact_handler.type_name);
             if let Some(artifact_type_str) = artifact_type {
                 if artifact_handler.type_name == artifact_type_str {
-                    // Get deployment ID and artifact name
-                    let id = &deployment.id;
-
-                    let artifact_name = &deployment.artifact_name;
-
-                    log::info!(
-                        "Processing artifact: type={}, id={}, artifact_name={}, index={}, length={}",
-                        artifact_type_str, id, artifact_name, index, length
-                    );
-
                     // Invoke callback for the artifact type
                     let _meta_data_str = meta_data.unwrap_or("");
                     (artifact_handler.callback)
@@ -962,36 +964,33 @@ async fn mender_client_download_artifact_callback(
                             data,
                             index,
                             length,
+                            chksum,
                         )
                         .await?;
 
                     // Handle first chunk special case
                     if index == 0 {
                         log_info!("Adding artifact type to the deployment data", "artifact_type" => artifact_type_str);
-                        if let Some(deployment) = deployment_data.as_ref() {
-                            let types_str: String = deployment
-                                .types
-                                .iter()
-                                .map(|t| t.as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            log_info!("Current deployment types", "types" => types_str);
-                        }
 
-                        // Add artifact type to the deployment data if not already present
+                        // First, prepare the type_str outside the lock
                         let type_str = HString::<50>::try_from(artifact_type_str).unwrap();
-                        // Check if types is empty or doesn't contain type_str
-                        let deployment = deployment_data.as_mut().unwrap();
-                        if deployment.types.is_empty()
-                            || !deployment.types.iter().any(|t| t == &type_str)
+
+                        // Then check if we need to add the type and add it in a smaller scope
                         {
-                            // Add the new type
-                            if deployment.types.push(type_str).is_err() {
-                                log::warn!(
-                                    "Unable to add artifact type '{}': types list is full",
-                                    artifact_type_str
-                                );
-                                return Err(MenderStatus::Failed);
+                            let mut deployment_data = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
+                            let deployment = deployment_data.as_mut().unwrap();
+
+                            if deployment.types.is_empty()
+                                || !deployment.types.iter().any(|t| t == &type_str)
+                            {
+                                log_info!("Adding artifact type to the deployment data", "artifact_type" => artifact_type_str);
+                                if deployment.types.push(type_str).is_err() {
+                                    log_warn!(
+                                        "Unable to add artifact type: ",
+                                        "artifact_type" => artifact_type_str
+                                    );
+                                    return Err(MenderStatus::Failed);
+                                }
                             }
                         }
 
@@ -1010,9 +1009,9 @@ async fn mender_client_download_artifact_callback(
     }
 
     // No matching handler found
-    log::error!(
-        "Unable to handle artifact type '{}'",
-        artifact_type.unwrap_or("")
+    log_error!(
+        "Unable to handle artifact type: ",
+        "artifact_type" => artifact_type.unwrap_or("")
     );
     Err(MenderStatus::Failed)
 }
@@ -1096,7 +1095,7 @@ async fn mender_client_authentication_work_function() -> MenderResult<()> {
         return Err(e);
     }
 
-    Ok((MenderStatus::Ok, ()))
+    Ok((MenderStatus::Done, ()))
 }
 
 async fn activate_addons() -> MenderResult<()> {
@@ -1124,14 +1123,20 @@ async fn mender_client_download_artifact_flash_callback(
     data: &[u8],
     index: usize,
     length: usize,
+    chksum: &[u8],
 ) -> MenderResult<()> {
-    log_info!("mender_client_download_artifact_flash_callback", "filename" => filename, "size" => size, "index" => index, "length" => length);
+    log_info!("mender_client_download_artifact_flash_callback",
+        // "filename" => filename,
+        "size" => size,
+        "index" => index,
+        "length" => length
+    );
     // Only proceed if filename is not empty
     if !filename.is_empty() {
         //log_info!("Processing artifact", "filename" => filename, "size" => size, "index" => index, "length" => length);
         // Open flash handle if this is the first chunk
         if index == 0 {
-            match mender_flash::mender_flash_open(filename, size).await {
+            match mender_flash::mender_flash_open(filename, size, chksum).await {
                 Ok(_) => (),
                 Err(e) => {
                     log_error!("Unable to open flash handle", "filename" => filename, "size" => size);

@@ -8,13 +8,13 @@ use crate::mender_mcu_client::core::mender_utils;
 use crate::mender_mcu_client::core::mender_utils::{
     DeploymentStatus, KeyStore, MenderResult, MenderStatus,
 };
-use crate::mender_mcu_client::platform::net::mender_http::HttpCallback;
 use crate::mender_mcu_client::platform::net::mender_http::{
     self, HttpClientEvent, MenderHttpResponseData,
 };
 use crate::mender_mcu_client::platform::net::mender_http::{
     mender_http_exit, mender_http_init, HttpMethod, MenderHttpConfig,
 };
+use crate::mender_mcu_client::platform::net::mender_http::{HttpCallback, HttpRequestParams};
 use crate::mender_mcu_client::platform::tls::mender_tls;
 use alloc::boxed::Box;
 use alloc::format;
@@ -217,7 +217,7 @@ pub async fn mender_api_perform_authentication() -> MenderResult<()> {
     };
 
     log_info!("Payload String", "payload_str" => payload_str);
-    log_info!("Payload String length", "payload_str.len()" => payload_str.len());
+    //log_info!("Payload String length", "payload_str.len()" => payload_str.len());
 
     // Sign payload
     let (_, signature) = mender_tls::mender_tls_sign_payload(&payload_str)
@@ -233,17 +233,17 @@ pub async fn mender_api_perform_authentication() -> MenderResult<()> {
     let mut response_data = MenderHttpResponseData::default();
     let mut status = 0;
     // Perform HTTP request
-    mender_http::mender_http_perform(
-        None,
-        MENDER_API_PATH_POST_AUTHENTICATION_REQUESTS,
-        HttpMethod::Post,
-        Some(&payload_str),
-        Some(&signature),
-        &my_text_callback,
-        &mut response_data,
-        &mut status,
-        None,
-    )
+    mender_http::mender_http_perform(HttpRequestParams {
+        jwt: None,
+        path: MENDER_API_PATH_POST_AUTHENTICATION_REQUESTS,
+        method: HttpMethod::Post,
+        payload: Some(&payload_str),
+        signature: Some(&signature),
+        callback: &my_text_callback,
+        response_data: &mut response_data,
+        status: &mut status,
+        params: None,
+    })
     .await
     .map_err(|_| {
         log_error!("Unable to perform HTTP request");
@@ -352,18 +352,18 @@ pub async fn mender_api_check_for_deployment() -> MenderResult<(String, String, 
     let mut response_data = MenderHttpResponseData::default();
     let mut status = 0;
 
-    // Perform HTTP request
-    mender_http::mender_http_perform(
-        Some(&jwt),
-        &path,
-        HttpMethod::Get,
-        None,
-        None,
-        &my_text_callback,
-        &mut response_data,
-        &mut status,
-        None,
-    )
+    // Get next deployment
+    mender_http::mender_http_perform(HttpRequestParams {
+        jwt: Some(&jwt),
+        path: &path,
+        method: HttpMethod::Get,
+        payload: None,
+        signature: None,
+        callback: &my_text_callback,
+        response_data: &mut response_data,
+        status: &mut status,
+        params: None,
+    })
     .await
     .map_err(|_| {
         log_error!("Unable to perform HTTP request");
@@ -490,17 +490,17 @@ pub async fn mender_api_publish_deployment_status(
     let mut status = 0;
 
     // Perform HTTP request
-    mender_http::mender_http_perform(
-        Some(&jwt),
-        &path,
-        HttpMethod::Put,
-        Some(&payload_str),
-        None,
-        &my_text_callback,
-        &mut response_data,
-        &mut status,
-        None,
-    )
+    mender_http::mender_http_perform(HttpRequestParams {
+        jwt: Some(&jwt),
+        path: &path,
+        method: HttpMethod::Put,
+        payload: Some(&payload_str),
+        signature: None,
+        callback: &my_text_callback,
+        response_data: &mut response_data,
+        status: &mut status,
+        params: None,
+    })
     .await
     .map_err(|_| {
         log_error!("Unable to perform HTTP request");
@@ -546,17 +546,17 @@ pub async fn mender_api_download_artifact(
     let my_callback = MyCallback;
 
     // Perform HTTP request with artifact callback
-    mender_http::mender_http_perform(
-        None,
-        uri,
-        HttpMethod::Get,
-        None,
-        None,
-        &my_callback,
-        &mut response_data,
-        &mut status,
-        callback,
-    )
+    mender_http::mender_http_perform(HttpRequestParams {
+        jwt: None,
+        path: uri,
+        method: HttpMethod::Get,
+        payload: None,
+        signature: None,
+        callback: &my_callback,
+        response_data: &mut response_data,
+        status: &mut status,
+        params: callback,
+    })
     .await
     .map_err(|_| {
         log_error!("Unable to perform HTTP request");
