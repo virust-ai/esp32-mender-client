@@ -1,6 +1,7 @@
 extern crate alloc;
 
 use crate::custom::mender_common::MenderCallback;
+use crate::custom::mender_config::ROOT_CERT;
 use crate::mender_mcu_client::core::mender_client::MENDER_CLIENT_RNG;
 use crate::mender_mcu_client::core::mender_utils::{MenderResult, MenderStatus};
 #[allow(unused_imports)]
@@ -111,15 +112,6 @@ pub async fn mender_http_init(
     *lock = Some(SendSyncStack(stack));
     Ok((MenderStatus::Ok, ()))
 }
-
-static BLUE_CERT: &str = "-----BEGIN CERTIFICATE-----\nMIIB0jCCAXmgAwIBAgIUBFs9wGFvoR3FEF9hK5b1iOrZsL0wCgYIKoZIzj0EAwIw\nGzEZMBcGA1UEAwwQZG9ja2VyLm1lbmRlci5pbzAeFw0yMTA2MDExMzExMTNaFw0z\nMTA1MzAxMzExMTNaMBsxGTAXBgNVBAMMEGRvY2tlci5tZW5kZXIuaW8wWTATBgcq\nhkjOPQIBBggqhkjOPQMBBwNCAAQPyND/aGLxFoMl9PVMQ0gBG74VXK4hVgOWOznX\nVrzoBfETf6wXEyV7Dq217ZxtV7gsafyZ6lWtLx33qRfQd7Exo4GaMIGXMB0GA1Ud\nDgQWBBSjTHcK2xcQFJLrjnAv+0Sl6pLD8zAfBgNVHSMEGDAWgBSjTHcK2xcQFJLr\njnAv+0Sl6pLD8zAPBgNVHRMBAf8EBTADAQH/MBMGA1UdJQQMMAoGCCsGAQUFBwMB\nMC8GA1UdEQQoMCaCEGRvY2tlci5tZW5kZXIuaW+CEiouZG9ja2VyLm1lbmRlci5p\nbzAKBggqhkjOPQQDAgNHADBEAiAvmTdg3z7GkrnNM+N5ujl4xIm6bdnVhhLXkJdn\nTyWKrwIgN2asFU4swaMUobs6uXMBt5zftfLKwuQIYbBEwBemWFg=\n-----END CERTIFICATE-----";
-
-//static ROOT_CERT: &str = "-----BEGIN CERTIFICATE-----\nMIIB0jCCAXmgAwIBAgIUPD+GXVJ83jPLZYEc7gevRKHsdHAwCgYIKoZIzj0EAwIw\nGzEZMBcGA1UEAwwQaG9zdGVkLm1lbmRlci5pbzAeFw0yNTAxMTMwODIwNDRaFw0z\nNTAxMTEwODIwNDRaMBsxGTAXBgNVBAMMEGhvc3RlZC5tZW5kZXIuaW8wWTATBgcq\nhkjOPQIBBggqhkjOPQMBBwNCAAS+DiZUIcwt+XGkmff5qC8BNTMOKW96vO3bRms4\nYwq5qC0en1QSoQAybQGNDtLErUhGbgDI2Q5WS4Ph712R/WDJo4GaMIGXMB0GA1Ud\nDgQWBBS5zsvs8zEZr9NvvTRoIGCEqtb1HTAfBgNVHSMEGDAWgBS5zsvs8zEZr9Nv\nvTRoIGCEqtb1HTAPBgNVHRMBAf8EBTADAQH/MBMGA1UdJQQMMAoGCCsGAQUFBwMB\nMC8GA1UdEQQoMCaCEGhvc3RlZC5tZW5kZXIuaW+CEiouaG9zdGVkLm1lbmRlci5p\nbzAKBggqhkjOPQQDAgNHADBEAiAaOtgatdm0dgJS4XcR/ItLlKp5RS1IWpxMT27w\nIPsiGAIgDxodYLHCopT9AgNBOK3vcYlK4KrjJDntwXWFb1JQKYY=\n-----END CERTIFICATE-----";
-static ROOT_CERT: &str = "-----BEGIN CERTIFICATE-----\nMIIEdTCCA12gAwIBAgIJAKcOSkw0grd/MA0GCSqGSIb3DQEBCwUAMGgxCzAJBgNV\nBAYTAlVTMSUwIwYDVQQKExxTdGFyZmllbGQgVGVjaG5vbG9naWVzLCBJbmMuMTIw\nMAYDVQQLEylTdGFyZmllbGQgQ2xhc3MgMiBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0\neTAeFw0wOTA5MDIwMDAwMDBaFw0zNDA2MjgxNzM5MTZaMIGYMQswCQYDVQQGEwJV\nUzEQMA4GA1UECBMHQXJpem9uYTETMBEGA1UEBxMKU2NvdHRzZGFsZTElMCMGA1UE\nChMcU3RhcmZpZWxkIFRlY2hub2xvZ2llcywgSW5jLjE7MDkGA1UEAxMyU3RhcmZp\nZWxkIFNlcnZpY2VzIFJvb3QgQ2VydGlmaWNhdGUgQXV0aG9yaXR5IC0gRzIwggEi\nMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDVDDrEKvlO4vW+GZdfjohTsR8/\ny8+fIBNtKTrID30892t2OGPZNmCom15cAICyL1l/9of5JUOG52kbUpqQ4XHj2C0N\nTm/2yEnZtvMaVq4rtnQU68/7JuMauh2WLmo7WJSJR1b/JaCTcFOD2oR0FMNnngRo\nOt+OQFodSk7PQ5E751bWAHDLUu57fa4657wx+UX2wmDPE1kCK4DMNEffud6QZW0C\nzyyRpqbn3oUYSXxmTqM6bam17jQuug0DuDPfR+uxa40l2ZvOgdFFRjKWcIfeAg5J\nQ4W2bHO7ZOphQazJ1FTfhy/HIrImzJ9ZVGif/L4qL8RVHHVAYBeFAlU5i38FAgMB\nAAGjgfAwge0wDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAYYwHQYDVR0O\nBBYEFJxfAN+qAdcwKziIorhtSpzyEZGDMB8GA1UdIwQYMBaAFL9ft9HO3R+G9FtV\nrNzXEMIOqYjnME8GCCsGAQUFBwEBBEMwQTAcBggrBgEFBQcwAYYQaHR0cDovL28u\nc3MyLnVzLzAhBggrBgEFBQcwAoYVaHR0cDovL3guc3MyLnVzL3guY2VyMCYGA1Ud\nHwQfMB0wG6AZoBeGFWh0dHA6Ly9zLnNzMi51cy9yLmNybDARBgNVHSAECjAIMAYG\nBFUdIAAwDQYJKoZIhvcNAQELBQADggEBACMd44pXyn3pF3lM8R5V/cxTbj5HD9/G\nVfKyBDbtgB9TxF00KGu+x1X8Z+rLP3+QsjPNG1gQggL4+C/1E2DUBc7xgQjB3ad1\nl08YuW3e95ORCLp+QCztweq7dp4zBncdDQh/U90bZKuCJ/Fp1U1ervShw3WnWEQt\n8jxwmKy6abaVd38PMV4s/KCHOkdp8Hlf9BRUpJVeEXgSYCfOn8J3/yNTd126/+pZ\n59vPr5KW7ySaNRB6nJHGDn2Z9j8Z3/VyVOEVqQdZe4O/Ui5GjLIAZHYcSNPYeehu\nVsyuLAOQ1xk4meTKCRlb/weWsKh/NEnfVqn3sF/tM+2MR7cwA130A4w=\n-----END CERTIFICATE-----";
-
-static CLOUDFLARE_CERT: &str = "-----BEGIN CERTIFICATE-----\nMIICeDCCAh6gAwIBAgIUdGybb97s1RnCo5wAqwmD2GCHHIMwCgYIKoZIzj0EAwIw\nRDFCMEAGA1UEAww5YzI3MTk2NGQ0MTc0OWZlYjEwZGE3NjI4MTZjOTUyZWUucjIu\nY2xvdWRmbGFyZXN0b3JhZ2UuY29tMB4XDTI1MDExNzA4MzczNloXDTM1MDExNTA4\nMzczNlowRDFCMEAGA1UEAww5YzI3MTk2NGQ0MTc0OWZlYjEwZGE3NjI4MTZjOTUy\nZWUucjIuY2xvdWRmbGFyZXN0b3JhZ2UuY29tMFkwEwYHKoZIzj0CAQYIKoZIzj0D\nAQcDQgAEUFtDg9i9xk78cLEd1xHgoswretxau5hP1bQzAfj7D/AG/650xUJ9n9Qa\naktj851Je6fnG1CBfTbUPOP2Gp08jqOB7TCB6jAdBgNVHQ4EFgQUJQHTo0teO/K8\nc1iZoP1L6Wm7R8gwHwYDVR0jBBgwFoAUJQHTo0teO/K8c1iZoP1L6Wm7R8gwDwYD\nVR0TAQH/BAUwAwEB/zATBgNVHSUEDDAKBggrBgEFBQcDATCBgQYDVR0RBHoweII5\nYzI3MTk2NGQ0MTc0OWZlYjEwZGE3NjI4MTZjOTUyZWUucjIuY2xvdWRmbGFyZXN0\nb3JhZ2UuY29tgjsqLmMyNzE5NjRkNDE3NDlmZWIxMGRhNzYyODE2Yzk1MmVlLnIy\nLmNsb3VkZmxhcmVzdG9yYWdlLmNvbTAKBggqhkjOPQQDAgNIADBFAiEAq9mHtH1w\nrc+1jq3F0TwuiYQH8XcgwRJa8GuLWvw4XP0CIEaIaZ4vXxbrvYH4NqUq4BAFlnce\nJO5o1YPe3GlJvdwI\n-----END CERTIFICATE-----";
-
-static ION_CERT: &str = "-----BEGIN CERTIFICATE-----\nMIIB8zCCAZmgAwIBAgIUPs7cEUjaCnOQz3eV5nljyj3jskowCgYIKoZIzj0EAwIw\nIzEhMB8GA1UEAwwYbWVuZGVyLXMuaW9ubW9iaWxpdHkuY29tMB4XDTIzMTAwOTEw\nMzYzN1oXDTMzMTAwNjEwMzYzN1owIzEhMB8GA1UEAwwYbWVuZGVyLXMuaW9ubW9i\naWxpdHkuY29tMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIuRIXhcEijAbfGWY\niOcmLyNgghyX15U2U0oxfKu4DsBSl1I6z/2byfICbaklMZctHnPwadEcKd4D+4D/\nnWLBv6OBqjCBpzAdBgNVHQ4EFgQUlupnfE/paWI4xIQ3O21bfdms4fYwHwYDVR0j\nBBgwFoAUlupnfE/paWI4xIQ3O21bfdms4fYwDwYDVR0TAQH/BAUwAwEB/zATBgNV\nHSUEDDAKBggrBgEFBQcDATA/BgNVHREEODA2ghhtZW5kZXItcy5pb25tb2JpbGl0\neS5jb22CGioubWVuZGVyLXMuaW9ubW9iaWxpdHkuY29tMAoGCCqGSM49BAMCA0gA\nMEUCIA/pNz8YCWCXBpdjXmGWfsAMK6y3wAEqLz6jXjBlZTZuAiEA/7/2MeuDJuBG\nOtuZUxkEyhRtZ25shuwU0u92qLc/QYE=\n-----END CERTIFICATE-----";
 
 async fn try_dns_query(stack: &Stack<'static>, host: &str) -> Result<IpAddress, MenderStatus> {
     const DNS_RETRY_COUNT: u8 = 3;
@@ -239,15 +231,7 @@ pub async fn connect_to_host<'a>(
         }
     }
 
-    let cert = if host.contains("cloudflarestorage.com") {
-        embedded_tls::Certificate::X509(CLOUDFLARE_CERT.as_bytes())
-    } else if host.contains("bluleap.ai") {
-        embedded_tls::Certificate::X509(BLUE_CERT.as_bytes())
-    } else if host.contains("ionmobility.com") {
-        embedded_tls::Certificate::X509(ION_CERT.as_bytes())
-    } else {
-        embedded_tls::Certificate::X509(ROOT_CERT.as_bytes())
-    };
+    let cert = embedded_tls::Certificate::X509(ROOT_CERT.as_bytes());
 
     let config = TlsConfig::new().with_cert(cert).with_server_name(host);
     //.with_max_fragment_length(MaxFragmentLength::Bits11);
@@ -466,12 +450,14 @@ async fn try_http_request<'a>(
         .await?;
 
         // Build request headers
-        let mut headers = build_header_request(method, path, jwt, signature, payload, &config)?;
+        let mut headers =
+            build_header_request(method, path, jwt, signature, payload, &config, is_download)?;
 
         // Add Range header only for downloads that are being resumed
         if is_download && bytes_received > 0 {
             headers = headers.trim_end_matches("\r\n").to_string();
-            headers.push_str(&format!("Range: bytes={}-\r\n\r\n", bytes_received));
+            headers.push_str(&format!("Range: bytes={}-\r\n", bytes_received));
+            headers.push_str("\r\n");
             log_info!("Resuming download from byte", "bytes_received" => bytes_received);
         }
 
@@ -681,6 +667,7 @@ async fn try_http_request<'a>(
                                                 break;
                                             }
                                         } else {
+                                            log_error!("Incomplete chunk header");
                                             break; // Incomplete chunk header
                                         }
                                     }
@@ -737,6 +724,7 @@ async fn try_http_request<'a>(
                             break 'retry_loop;
                         }
                     } else {
+                        log_error!("Processing data chunk in a loop", "length" => n);
                         // Similar changes for the subsequent reads after headers
                         let mut current_pos = 0;
                         while current_pos < n {
@@ -811,6 +799,7 @@ async fn try_http_request<'a>(
                                     break;
                                 }
                             } else {
+                                log_error!("Incomplete chunk header");
                                 break; // Incomplete chunk header
                             }
                         }
@@ -919,29 +908,22 @@ fn build_header_request(
     signature: Option<&str>,
     payload: Option<&str>,
     config: &MenderHttpConfig,
+    is_download: bool,
 ) -> Result<String, MenderStatus> {
     //log_info!("build_header_request");
-
-    // For Cloudflare R2 storage URLs, use minimal headers
-    if path.contains("cloudflarestorage.com") {
-        let mut request = format!("{} {} HTTP/1.1\r\n", method, path);
-        request.push_str("Connection: close\r\n"); // Optional but recommended
-        request.push_str("\r\n");
-
-        log_info!("request", "request" => request);
-        return Ok(request);
-    }
 
     let host = extract_host(&config.host)?;
     let mut request = format!("{} {} HTTP/1.1\r\n", method, path);
     request.push_str(&format!("Host: {}\r\n", host));
     request.push_str(&format!("User-Agent: {}\r\n", USER_AGENT));
 
-    request.push_str("Connection: close\r\n"); // Optional but recommended
-
-    // // Try with keep-alive instead of close
-    // request.push_str("Connection: keep-alive\r\n");
-    // request.push_str("Keep-Alive: timeout=30\r\n");  // 30 second keep-alive
+    // Use keep-alive with timeout for downloads, close for other requests
+    if is_download {
+        request.push_str("Connection: keep-alive\r\n");
+        request.push_str("Keep-Alive: timeout=30\r\n"); // 30 second timeout
+    } else {
+        request.push_str("Connection: close\r\n");
+    }
 
     if let Some(token) = jwt {
         request.push_str(&format!("Authorization: Bearer {}\r\n", token));
