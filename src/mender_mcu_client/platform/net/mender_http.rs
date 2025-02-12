@@ -1,6 +1,7 @@
 extern crate alloc;
 
 use crate::custom::mender_common::MenderCallback;
+use crate::custom::mender_config::ROOT_CERT;
 use crate::mender_mcu_client::core::mender_client::MENDER_CLIENT_RNG;
 use crate::mender_mcu_client::core::mender_utils::{MenderResult, MenderStatus};
 #[allow(unused_imports)]
@@ -20,8 +21,6 @@ use embedded_tls::{
     Aes128GcmSha256, TlsConfig, TlsConnection, TlsContext, TlsError, UnsecureProvider,
 };
 use heapless::FnvIndexMap;
-use crate::custom::mender_config::ROOT_CERT;
-
 
 const HTTP_RECV_BUF_LENGTH: usize = 1024 + 512;
 const HTTP_DEFAULT_PORT: u16 = 80;
@@ -233,7 +232,7 @@ pub async fn connect_to_host<'a>(
     }
 
     let cert = embedded_tls::Certificate::X509(ROOT_CERT.as_bytes());
- 
+
     let config = TlsConfig::new().with_cert(cert).with_server_name(host);
     //.with_max_fragment_length(MaxFragmentLength::Bits11);
     //.enable_rsa_signatures();
@@ -451,7 +450,8 @@ async fn try_http_request<'a>(
         .await?;
 
         // Build request headers
-        let mut headers = build_header_request(method, path, jwt, signature, payload, &config, is_download)?;
+        let mut headers =
+            build_header_request(method, path, jwt, signature, payload, &config, is_download)?;
 
         // Add Range header only for downloads that are being resumed
         if is_download && bytes_received > 0 {
@@ -916,7 +916,6 @@ fn build_header_request(
     let mut request = format!("{} {} HTTP/1.1\r\n", method, path);
     request.push_str(&format!("Host: {}\r\n", host));
     request.push_str(&format!("User-Agent: {}\r\n", USER_AGENT));
-
 
     // Use keep-alive with timeout for downloads, close for other requests
     if is_download {
