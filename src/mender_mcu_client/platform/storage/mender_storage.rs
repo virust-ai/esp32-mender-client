@@ -54,9 +54,6 @@ pub async fn mender_storage_get_authentication_keys() -> MenderResult<(Vec<u8>, 
         storage.read(PUBLIC_KEY_ADDR, &mut pub_len_bytes)?;
         let pub_len = u32::from_le_bytes(pub_len_bytes) as usize;
 
-        log_info!("priv_len:", "priv_len" => priv_len);
-        log_info!("pub_len:", "pub_len" => pub_len);
-
         // Validate sizes
         if priv_len > MAX_KEY_SIZE || pub_len > MAX_KEY_SIZE {
             log_error!("Stored key size too large");
@@ -123,7 +120,7 @@ pub async fn mender_storage_delete_authentication_keys() -> MenderResult<()> {
 }
 
 pub async fn mender_storage_set_deployment_data(deployment_data: &str) -> MenderResult<()> {
-    log_info!("mender_storage_set_deployment_data", "deployment_data" => deployment_data);
+    log_info!("mender_storage_set_deployment_data: {}", deployment_data);
     let mut storage = MENDER_STORAGE.lock().await;
     if let Some(storage) = storage.as_mut() {
         let data = deployment_data.as_bytes();
@@ -152,7 +149,7 @@ pub async fn mender_storage_get_deployment_data() -> MenderResult<String> {
         let len = u32::from_le_bytes(len_bytes) as usize;
 
         if len == 0 || len > MAX_DATA_SIZE {
-            log_error!("Deployment data not found");
+            log_warn!("Deployment data not found");
             return Err(MenderStatus::NotFound);
         }
 

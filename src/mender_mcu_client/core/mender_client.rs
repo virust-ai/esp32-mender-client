@@ -254,7 +254,7 @@ pub async fn mender_client_init(
         || config.device_type.is_empty()
         || config.identity.is_empty()
     {
-        log::error!("Invalid artifact name, can't be empty");
+        log_error!("Invalid artifact name, can't be empty");
         return Err(MenderStatus::Other);
     }
 
@@ -262,7 +262,7 @@ pub async fn mender_client_init(
     let mut saved_config = config.clone();
 
     // Print out identity contents
-    log::info!("Identity contents: {:?}", saved_config.identity);
+    log_info!("Identity contents: {:?}", saved_config.identity);
 
     // Handle host configuration
     saved_config.host = config.host.clone();
@@ -323,7 +323,7 @@ pub async fn mender_client_init(
     if mender_client_register_artifact_type(
         "rootfs-image",
         &FLASH_CALLBACK,
-        false,
+        true,
         &saved_config.artifact_name,
     )
     .await
@@ -431,7 +431,7 @@ pub async fn mender_client_register_addon<C: 'static, CB: 'static>(
             log_error!("Unable to activate add-on");
             // Cleanup on failure
             if let Err(e) = addon.exit().await {
-                log_error!("Add-on exit failed: ", "error" => e);
+                log_error!("Add-on exit failed: {:?}", e);
             }
             return Err(e);
         }
@@ -456,7 +456,7 @@ pub async fn mender_client_activate() -> MenderStatus {
         log_info!("mender_client_activate: update work activated");
         MenderStatus::Done
     } else {
-        log::error!("Unable to activate update work");
+        log_error!("Unable to activate update work");
         MenderStatus::Other
     }
 }
@@ -494,7 +494,7 @@ pub async fn mender_client_deactivate() -> MenderStatus {
     if mender_scheduler_work_deactivate(work).await.is_ok() {
         MenderStatus::Done
     } else {
-        log::error!("Unable to deactivate update work");
+        log_error!("Unable to deactivate update work");
         MenderStatus::Other
     }
 }
@@ -566,9 +566,9 @@ pub async fn mender_client_exit() -> MenderStatus {
 
     if let Some(work) = client_work.take() {
         if mender_scheduler_work_delete(&work).await.is_ok() {
-            log::info!("Update work deleted");
+            log_info!("Update work deleted");
         } else {
-            log::error!("Unable to delete update work");
+            log_error!("Unable to delete update work");
         }
     }
 
@@ -629,7 +629,10 @@ async fn mender_client_work_function() -> MenderStatus {
         };
 
         if let Some(mut w) = work_context {
-            log_info!("mender_client_work_function: setting work period", "period" => period);
+            log_info!(
+                "mender_client_work_function: setting work period: {}",
+                period
+            );
             if (mender_scheduler::mender_scheduler_work_set_period(&mut w, period).await).is_err() {
                 log_error!("Unable to set work period");
                 if let Err(release_err) = mender_client_network_release().await {
@@ -681,16 +684,16 @@ async fn mender_client_initialization_work_function() -> MenderResult<()> {
                 Ok((json_data, _)) => {
                     let mut deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
                     *deployment = Some(json_data);
-                    log_info!("Successfully parsed deployment data", "deployment" => deployment);
+                    log_info!("Successfully parsed deployment: {:?}", deployment);
                 }
                 Err(e) => {
-                    log_error!("Failed to parse deployment data: ", "error" => e);
+                    log_error!("Failed to parse deployment data, error: {}", e);
                     mender_storage::mender_storage_delete_deployment_data().await?;
 
                     let callbacks = MENDER_CLIENT_CALLBACKS.lock().await;
                     if let Some(cb) = callbacks.as_ref() {
                         if let Err(e) = (cb.restart)() {
-                            log_error!("Restart callback failed: ", "error" => e);
+                            log_error!("Restart callback failed: {:?}", e);
                             return Err(e);
                         }
                     }
@@ -702,13 +705,13 @@ async fn mender_client_initialization_work_function() -> MenderResult<()> {
             log_info!("No deployment data found");
         }
         Err(e) => {
-            log_error!("Failed to get deployment data:", "error" => e);
+            log_error!("Failed to get deployment data, error: {:?}", e);
             mender_storage::mender_storage_delete_deployment_data().await?;
 
             let callbacks = MENDER_CLIENT_CALLBACKS.lock().await;
             if let Some(cb) = callbacks.as_ref() {
                 if let Err(e) = (cb.restart)() {
-                    log_error!("Restart callback failed: ", "error" => e);
+                    log_error!("Restart callback failed: {:?}", e);
                     return Err(e);
                 }
             }
@@ -752,7 +755,12 @@ async fn mender_client_update_work_function() -> MenderStatus {
                 log_info!("No deployment available");
                 return MenderStatus::Done;
             }
-            log_info!("Deployment available", "id" => id, "artifact_name" => artifact_name, "uri" => uri);
+            log_debug!(
+                "Deployment available, id: {}, artifact_name: {}, uri: {}",
+                id,
+                artifact_name,
+                uri
+            );
             Some((id, artifact_name, uri))
         }
         Err(e) => {
@@ -800,7 +808,12 @@ async fn mender_client_update_work_function() -> MenderStatus {
         *deployment = Some(deployment_data.clone());
     }
     // Download deployment artifact
-    log_info!("Downloading deployment artifact with id", "id" => id, "artifact name" => artifact_name, "uri" => unescaped_uri);
+    log_debug!(
+        "Downloading deployment artifact with id: {}, artifact_name: {}, uri: {}",
+        id,
+        artifact_name,
+        unescaped_uri
+    );
     mender_client_publish_deployment_status(&id, DeploymentStatus::Downloading).await;
 
     let download_callback = MyDownLoad;
@@ -904,7 +917,11 @@ async fn mender_client_publish_deployment_status(
     id: &str,
     status: DeploymentStatus,
 ) -> MenderStatus {
-    log_info!("mender_client_publish_deployment_status", "id" => id, "status" => status);
+    log_info!(
+        "mender_client_publish_deployment_status, id: {}, status: {}",
+        id,
+        status
+    );
     // Publish status to the mender server
     let ret = mender_api::mender_api_publish_deployment_status(id, status).await;
 
@@ -931,14 +948,11 @@ async fn mender_client_download_artifact_callback(
     length: usize,
     chksum: &[u8],
 ) -> MenderResult<()> {
-    log_info!("mender_client_download_artifact_callback",
-        // "artifact_type" => artifact_type.unwrap_or(""),
-
-        // "meta_data" => meta_data.unwrap_or(""),
-        // "filename" => filename.unwrap_or(""),
-        "size" => size,
-        "index" => index,
-        "length" => length
+    log_debug!(
+        "mender_client_download_artifact_callback, size: {}, index: {}, length: {}",
+        size,
+        index,
+        length
     );
 
     let artifact_types = MENDER_CLIENT_ARTIFACT_TYPES.lock().await;
@@ -970,7 +984,10 @@ async fn mender_client_download_artifact_callback(
 
                     // Handle first chunk special case
                     if index == 0 {
-                        log_info!("Adding artifact type to the deployment data", "artifact_type" => artifact_type_str);
+                        log_debug!(
+                            "Adding artifact type {} to the deployment data",
+                            artifact_type_str
+                        );
 
                         // First, prepare the type_str outside the lock
                         let type_str = HString::<50>::try_from(artifact_type_str).unwrap();
@@ -983,11 +1000,14 @@ async fn mender_client_download_artifact_callback(
                             if deployment.types.is_empty()
                                 || !deployment.types.iter().any(|t| t == &type_str)
                             {
-                                log_info!("Adding artifact type to the deployment data", "artifact_type" => artifact_type_str);
+                                log_debug!(
+                                    "Adding artifact type {} to the deployment data",
+                                    artifact_type_str
+                                );
                                 if deployment.types.push(type_str).is_err() {
-                                    log_warn!(
-                                        "Unable to add artifact type: ",
-                                        "artifact_type" => artifact_type_str
+                                    log_error!(
+                                        "Unable to add artifact type: {}",
+                                        artifact_type_str
                                     );
                                     return Err(MenderStatus::Failed);
                                 }
@@ -1010,8 +1030,8 @@ async fn mender_client_download_artifact_callback(
 
     // No matching handler found
     log_error!(
-        "Unable to handle artifact type: ",
-        "artifact_type" => artifact_type.unwrap_or("")
+        "Unable to handle artifact type: {}",
+        artifact_type.unwrap_or("")
     );
     Err(MenderStatus::Failed)
 }
@@ -1125,21 +1145,20 @@ async fn mender_client_download_artifact_flash_callback(
     length: usize,
     chksum: &[u8],
 ) -> MenderResult<()> {
-    log_info!("mender_client_download_artifact_flash_callback",
-        // "filename" => filename,
-        "size" => size,
-        "index" => index,
-        "length" => length
-    );
+    log_info!("mender_client_download_artifact_flash_callback, filename: {}, size: {}, index: {}, length: {}", filename, size, index, length);
+
     // Only proceed if filename is not empty
     if !filename.is_empty() {
-        //log_info!("Processing artifact", "filename" => filename, "size" => size, "index" => index, "length" => length);
         // Open flash handle if this is the first chunk
         if index == 0 {
             match mender_flash::mender_flash_open(filename, size, chksum).await {
                 Ok(_) => (),
                 Err(e) => {
-                    log_error!("Unable to open flash handle", "filename" => filename, "size" => size);
+                    log_error!(
+                        "Unable to open flash handle, filename: {}, size: {}",
+                        filename,
+                        size
+                    );
                     return Err(e);
                 }
             }
@@ -1147,14 +1166,24 @@ async fn mender_client_download_artifact_flash_callback(
 
         // Write data to flash
         if let Err(e) = mender_flash::mender_flash_write(data, index, length).await {
-            log_error!("Unable to write data to flash", "filename" => filename, "size" => size, "index" => index, "length" => length);
+            log_error!(
+                "Unable to write data to flash, filename: {}, size: {}, index: {}, length: {}",
+                filename,
+                size,
+                index,
+                length
+            );
             return Err(e);
         }
 
         // Close flash handle if this is the last chunk
         if index + length >= size {
             if let Err(e) = mender_flash::mender_flash_close().await {
-                log_error!("Unable to close flash handle", "filename" => filename, "size" => size);
+                log_error!(
+                    "Unable to close flash handle, filename: {}, size: {}",
+                    filename,
+                    size
+                );
                 return Err(e);
             }
         }

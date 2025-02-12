@@ -65,7 +65,7 @@ where
                 .map_err(|_| OtaError::InvalidChecksum)?;
         }
 
-        log_info!("[OTA] Received hash: ", "target_hash" => target_hash);
+        log_debug!("[OTA] Received hash: {:?}", target_hash);
 
         let ota_offset = self.get_partitions()[next_part].0;
         self.progress = Some(FlashProgress {
@@ -119,33 +119,13 @@ where
         }
 
         if length as u32 > progress.remaining {
-            log::error!("[OTA] Write size exceeds remaining size");
+            log_error!("[OTA] Write size exceeds remaining size");
             return Err(OtaError::FlashRWError);
         }
 
         //let write_size = chunk.len() as u32;
         let write_size = length as u32;
         let write_size = write_size.min(progress.remaining) as usize;
-
-        // // Log chunk details
-        // log_info!(
-        //     "[OTA] Writing chunk: ",
-        //     "flash_offset" => progress.flash_offset,
-        //     "write_size" => write_size,
-        //     "remaining" => progress.remaining
-        // );
-
-
-        // // Log first chunk's bytes
-        // if progress.flash_offset == self.pinfo.ota_partitions[progress.target_partition].0 {
-        //     log_info!("[OTA] First chunk bytes: ", "chunk" => &chunk[..16.min(write_size)]);
-        // }
-    
-
-        // // Log last chunk's bytes
-        // if progress.remaining <= write_size as u32 {
-        //     log::info!("[OTA] Last chunk bytes: {:02x?}", &chunk[write_size.saturating_sub(16)..write_size]);
-        // }
 
         self.flash
             .write(progress.flash_offset, &chunk[..write_size])
@@ -173,8 +153,8 @@ where
 
         if progress.target_hash != progress.last_hash.clone().finalize().as_slice() {
  
-            log_warn!("[OTA] Calculated hash: ", "hash" => progress.last_hash);
-            log_warn!("[OTA] Target hash: ", "hash" => progress.target_hash);
+            log_warn!("[OTA] Calculated hash: {:?}", progress.last_hash);
+            log_warn!("[OTA] Target hash: {:?}", progress.target_hash);
             log_error!("[OTA] Crc check failed! Cant finish ota update...");
 
             return Err(OtaError::WrongCRC);
@@ -199,20 +179,9 @@ where
         // Then set it as the boot partition
         self.set_target_ota_boot_partition(progress.target_partition, img_state);
 
-        // // Verify the settings were applied
-        // let (slot1, slot2) = self.get_ota_boot_entries();
-        // let target_part = helpers::seq_to_part(slot1.seq.max(slot2.seq), self.pinfo.ota_partitions_count);
-        
-        // if target_part != progress.target_partition {
-        //     log_error!("[OTA] Failed to set boot partition", 
-        //         "expected" => progress.target_partition,
-        //         "actual" => target_part);
-        //     return Err(OtaError::FlashRWError);
-        // }
-
-        log_info!("[OTA] OTA set pending image", 
-            "target_partition" => progress.target_partition, 
-            "img_state" => img_state);
+        log_info!("[OTA] OTA set pending image, target partition: {}, img_state: {:?}", 
+            progress.target_partition, 
+            img_state);
         Ok(())
     }
 
@@ -230,30 +199,15 @@ where
         let mut remaining = progress.flash_size;
 
         // Add debug logging
-        log_info!("[OTA] Starting verification from offset: ", "offset" => format_args!("0x{:x}", partition_offset));
-        log_info!("[OTA] Total size to verify: ", "size" => remaining);
-        log_info!("[OTA] Target partition: ", "partition" => progress.target_partition);
-
-
-        // // Read and log first bytes
-        // if remaining > 0 {
-        //     let n = remaining.min(OTA_VERIFY_READ_SIZE as u32);
-        //     _ = self.flash.read(partition_offset, &mut bytes[..n as usize]);
-        //     log_info!("[OTA] First bytes read back: ", "bytes" => &bytes[..16.min(n as usize)]);
-        // }
-
+        log_debug!("[OTA] Starting verification from offset: {}", format_args!("0x{:x}", partition_offset));
+        log_debug!("[OTA] Total size to verify: {}", remaining);
+        log_debug!("[OTA] Target partition: {}", progress.target_partition);
 
         // Read all data for hash calculation
         while remaining > 0 {
             let n = remaining.min(OTA_VERIFY_READ_SIZE as u32);
             _ = self.flash.read(partition_offset, &mut bytes[..n as usize]);
-            
-            // // Log last chunk's bytes
-            // if remaining <= n {
-            //     log_info!("[OTA] Last bytes read back: ", "bytes" => &bytes[n.saturating_sub(16) as usize..n as usize]);
-            // }
-            
-
+         
             partition_offset += n;
             remaining -= n;
             hasher.update(&bytes[..n as usize]);
@@ -261,9 +215,9 @@ where
 
         let computed_hash = hasher.finalize();
 
-        log_warn!("[OTA] Write hash: ", "hash" => progress.last_hash.finalize().as_slice());
-        log_warn!("[OTA] Read hash: ", "hash" => computed_hash.as_slice());
-        log_warn!("[OTA] Target hash: ", "hash" => progress.target_hash);
+        log_warn!("[OTA] Write hash: {:?}", progress.last_hash.finalize().as_slice());
+        log_warn!("[OTA] Read hash: {:?}", computed_hash.as_slice());
+        log_warn!("[OTA] Target hash: {:?}", progress.target_hash);
 
 
         Ok(computed_hash[..] == progress.target_hash[..])
@@ -317,27 +271,27 @@ where
         _ = flash.write(self.pinfo.otadata_offset, &entry1);
         _ = flash.write(self.pinfo.otadata_offset + (self.pinfo.otadata_size >> 1), &entry2);
 
-        log_info!("[OTA] Writing boot entries for target partition", 
-            "target" => target,
-            "offset1" => format_args!("0x{:x}", self.pinfo.otadata_offset),
-            "offset2" => format_args!("0x{:x}", self.pinfo.otadata_offset + (self.pinfo.otadata_size >> 1)));
+        log_debug!("[OTA] Writing boot entries for target partition: {}, offset1: {}, offset2: {}", 
+            target,
+            format_args!("0x{:x}", self.pinfo.otadata_offset),
+            format_args!("0x{:x}", self.pinfo.otadata_offset + (self.pinfo.otadata_size >> 1)));
 
         // Verify the writes
         let mut verify_buf = [0u8; 32];
         
         // Verify slot 1
         _ = flash.read(self.pinfo.otadata_offset, &mut verify_buf);
-        log_info!("[OTA] Slot 1 verification", 
-            "seq" => u32::from_le_bytes(verify_buf[0..4].try_into().unwrap()),
-            "state" => format_args!("0x{:x}", u32::from_le_bytes(verify_buf[24..28].try_into().unwrap())),
-            "crc" => format_args!("0x{:x}", u32::from_le_bytes(verify_buf[28..32].try_into().unwrap())));
+        log_debug!("[OTA] Slot 1 verification, seq: {}, state: {}, crc: {}", 
+            u32::from_le_bytes(verify_buf[0..4].try_into().unwrap()),
+            format_args!("0x{:x}", u32::from_le_bytes(verify_buf[24..28].try_into().unwrap())),
+            format_args!("0x{:x}", u32::from_le_bytes(verify_buf[28..32].try_into().unwrap())));
 
         // Verify slot 2
         _ = flash.read(self.pinfo.otadata_offset + (self.pinfo.otadata_size >> 1), &mut verify_buf);
-        log_info!("[OTA] Slot 2 verification", 
-            "seq" => u32::from_le_bytes(verify_buf[0..4].try_into().unwrap()),
-            "state" => format_args!("0x{:x}", u32::from_le_bytes(verify_buf[24..28].try_into().unwrap())),
-            "crc" => format_args!("0x{:x}", u32::from_le_bytes(verify_buf[28..32].try_into().unwrap())));
+        log_debug!("[OTA] Slot 2 verification, seq: {}, state: {}, crc: {}", 
+            u32::from_le_bytes(verify_buf[0..4].try_into().unwrap()),
+            format_args!("0x{:x}", u32::from_le_bytes(verify_buf[24..28].try_into().unwrap())),
+            format_args!("0x{:x}", u32::from_le_bytes(verify_buf[28..32].try_into().unwrap())));
     }
 
     pub fn set_ota_state(&mut self, slot: u8, state: OtaImgState) -> Result<()> {
@@ -431,7 +385,7 @@ where
         if current_slot.ota_state != OtaImgState::EspOtaImgValid {
             self.set_ota_state(current_slot_nmb, OtaImgState::EspOtaImgValid)?;
 
-            log_info!("Marked current slot as valid!", "current_slot_nmb" => current_slot_nmb, "current_slot" => current_slot);
+            log_info!("Marked current slot as valid!, current_slot_nmb: {}, current_slot: {:?}", current_slot_nmb, current_slot);
         }
 
         Ok(())
@@ -477,7 +431,7 @@ where
             let p_size = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
             //let p_name = core::str::from_utf8(&bytes[12..28]).unwrap();
             //let p_flags = u32::from_le_bytes(bytes[28..32].try_into().unwrap());
-            //log::info!("{magic:?} {p_type} {p_subtype} {p_offset} {p_size} {p_name} {p_flags}");
+            //log_info!("{magic:?} {p_type} {p_subtype} {p_offset} {p_size} {p_name} {p_flags}");
 
             if *p_type == 0 && *p_subtype >= FIRST_OTA_PART_SUBTYPE {
                 let ota_part_idx = *p_subtype - FIRST_OTA_PART_SUBTYPE;

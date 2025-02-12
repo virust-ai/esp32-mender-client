@@ -184,7 +184,7 @@ pub async fn mender_artifact_process_data(
                 return Err(MenderStatus::Failed);
             }
             ctx.input.length += input_length;
-            log_info!("current input length", "length" => ctx.input.length);
+            log_debug!("current input length: {}", ctx.input.length);
         }
     }
 
@@ -391,8 +391,7 @@ pub async fn mender_artifact_parse_tar_header(ctx: &mut MenderArtifactContext) -
     ctx.file.size = usize::from_str_radix(size_str, 8).map_err(|_| MenderStatus::Failed)?;
     ctx.file.index = 0;
 
-    //log_info!("file size", "size" => ctx.file.size);
-    log_info!("file name", "name" => ctx.file.name.as_str());
+    log_debug!("file name: {}", ctx.file.name.as_str());
 
     // Shift data in the buffer
     if mender_artifact_shift_data(ctx, MENDER_ARTIFACT_STREAM_BLOCK_SIZE).is_err() {
@@ -418,30 +417,30 @@ pub async fn mender_artifact_check_version(ctx: &mut MenderArtifactContext) -> M
     // Parse version file
     let (version_info, _): (VersionInfo, _) =
         serde_json_core::from_slice(&ctx.input.data[..ctx.file.size]).map_err(|_| {
-            log::error!("Unable to parse version file");
+            log_error!("Unable to parse version file");
             MenderStatus::Failed
         })?;
 
     // Check format
     if version_info.format != MENDER_ARTIFACT_VERSION_FORMAT {
-        log::error!("Invalid version format");
+        log_error!("Invalid version format");
         return Err(MenderStatus::Failed);
     }
 
     // Check version
     if version_info.version != MENDER_ARTIFACT_VERSION_VALUE as i64 {
-        log::error!("Invalid version value");
+        log_error!("Invalid version value");
         return Err(MenderStatus::Failed);
     }
 
-    log::info!("Artifact has valid version");
+    log_info!("Artifact has valid version");
 
     // Shift data in the buffer
     if let Err(e) = mender_artifact_shift_data(
         ctx,
         mender_artifact_round_up(ctx.file.size, MENDER_ARTIFACT_STREAM_BLOCK_SIZE),
     ) {
-        log::error!("Unable to shift input data");
+        log_error!("Unable to shift input data");
         return Err(e);
     }
 
@@ -459,16 +458,14 @@ pub async fn mender_artifact_read_header_info(ctx: &mut MenderArtifactContext) -
 
     let json_str = match core::str::from_utf8(&ctx.input.data[..ctx.file.size]) {
         Ok(s) => {
-            log_info!("JSON string",
-                "content" => s,
-                "length" => s.len()
-            );
+            log_debug!("JSON string: {}, length: {}", s, s.len());
             s
         }
         Err(e) => {
-            log_error!("Invalid UTF-8 in header-info",
-                "error" => e,
-                "size" => ctx.file.size
+            log_error!(
+                "Invalid UTF-8 in header-info, error: {}, size: {}",
+                e,
+                ctx.file.size
             );
             return Err(MenderStatus::Failed);
         }
@@ -481,10 +478,11 @@ pub async fn mender_artifact_read_header_info(ctx: &mut MenderArtifactContext) -
             result
         }
         Err(e) => {
-            log_error!("Unable to parse header-info JSON",
-                "error" => e,
-                "json_content" => json_str,
-                "size" => ctx.file.size
+            log_error!(
+                "Unable to parse header-info JSON, error: {}, json_content: {}, size: {}",
+                e,
+                json_str,
+                ctx.file.size
             );
             return Err(MenderStatus::Failed);
         }
@@ -534,16 +532,14 @@ pub async fn mender_artifact_read_type_info(ctx: &mut MenderArtifactContext) -> 
 
     let json_str = match core::str::from_utf8(&ctx.input.data[..ctx.file.size]) {
         Ok(s) => {
-            log_info!("Type-info JSON string",
-                "content" => s,
-                "length" => s.len()
-            );
+            log_debug!("Type-info JSON string: {}, length: {}", s, s.len());
             s
         }
         Err(e) => {
-            log_error!("Invalid UTF-8 in type-info",
-                "error" => e,
-                "size" => ctx.file.size
+            log_error!(
+                "Invalid UTF-8 in type-info, error: {}, size: {}",
+                e,
+                ctx.file.size
             );
             return Err(MenderStatus::Failed);
         }
@@ -552,12 +548,7 @@ pub async fn mender_artifact_read_type_info(ctx: &mut MenderArtifactContext) -> 
     // Try parsing with more detailed error handling
     match serde_json_core::from_str::<TypeInfo>(json_str) {
         Ok((type_info, bytes_read)) => {
-            log_info!("Successfully parsed type-info",
-                "bytes_read" => bytes_read,
-                "type_name" => type_info.type_name.as_str(),
-                "checksum" => type_info.artifact_provides.checksum.as_str(),
-                "version" => type_info.artifact_provides.version.as_str()
-            );
+            log_debug!("Successfully parsed type-info, bytes read: {}, type: {}, checksum: {}, version: {}", bytes_read, type_info.type_name, type_info.artifact_provides.checksum, type_info.artifact_provides.version);
 
             // Verify that the type matches the payload type from header-info
             // Extract index from filename (similar to meta-data)
@@ -588,7 +579,10 @@ pub async fn mender_artifact_read_type_info(ctx: &mut MenderArtifactContext) -> 
             };
 
             ctx.payloads.values[index].checksum = type_info.artifact_provides.checksum;
-            log_info!("type-info checksum", "checksum" => ctx.payloads.values[index].checksum.as_str());
+            log_info!(
+                "type-info checksum: {}",
+                ctx.payloads.values[index].checksum.as_str()
+            );
 
             // Shift data in the buffer
             if mender_artifact_shift_data(
@@ -604,11 +598,13 @@ pub async fn mender_artifact_read_type_info(ctx: &mut MenderArtifactContext) -> 
             Ok((MenderStatus::Done, ()))
         }
         Err(e) => {
-            log_error!("JSON parse error details",
-                "error" => e,
-                "json_content" => json_str,
-                "size" => ctx.file.size
+            log_error!(
+                "JSON parse error details, error: {}, json_content: {}, size: {}",
+                e,
+                json_str,
+                ctx.file.size
             );
+
             Err(MenderStatus::Failed)
         }
     }
@@ -619,31 +615,31 @@ pub async fn mender_artifact_read_meta_data(ctx: &mut MenderArtifactContext) -> 
     let index = {
         let name = &ctx.file.name;
         if !name.starts_with("header.tar/headers/") || !name.ends_with("/meta-data") {
-            log::error!("Invalid artifact format");
+            log_error!("Invalid artifact format");
             return Err(MenderStatus::Failed);
         }
 
         let start = "header.tar/headers/".len();
         let end = name[start..].find('/').ok_or_else(|| {
-            log::error!("Invalid artifact format");
+            log_error!("Invalid artifact format");
             MenderStatus::Failed
         })?;
 
         let index_str = &name[start..start + end];
         let index = index_str.parse::<usize>().map_err(|_| {
-            log::error!("Invalid artifact format");
+            log_error!("Invalid artifact format");
             MenderStatus::Failed
         })?;
 
         if index >= ctx.payloads.size {
-            log::error!("Invalid artifact format");
+            log_error!("Invalid artifact format");
             return Err(MenderStatus::Failed);
         }
         index
     };
 
     // Check size of the meta-data
-    log_info!("file size", "size" => ctx.file.size);
+    log_debug!("file size: {}", ctx.file.size);
     if mender_artifact_round_up(ctx.file.size, MENDER_ARTIFACT_STREAM_BLOCK_SIZE) == 0 {
         log_info!("mender_artifact_read_meta_data: Nothing to do");
         // Nothing to do
@@ -662,17 +658,16 @@ pub async fn mender_artifact_read_meta_data(ctx: &mut MenderArtifactContext) -> 
     // First log the raw JSON string
     let json_str = match core::str::from_utf8(&ctx.input.data[..ctx.file.size]) {
         Ok(s) => {
-            log_info!("Meta-data JSON string",
-                "content" => s,
-                "length" => s.len()
-            );
+            log_debug!("Meta-data JSON string: {}, length: {}", s, s.len());
             s
         }
         Err(e) => {
-            log_error!("Invalid UTF-8 in meta-data",
-                "error" => e,
-                "size" => ctx.file.size
+            log_error!(
+                "Invalid UTF-8 in meta-data, error: {}, size: {}",
+                e,
+                ctx.file.size
             );
+
             return Err(MenderStatus::Failed);
         }
     };
@@ -680,16 +675,19 @@ pub async fn mender_artifact_read_meta_data(ctx: &mut MenderArtifactContext) -> 
     // Read meta-data
     let (meta_data, bytes_read): (JsonResponse, _) =
         serde_json_core::from_slice(&ctx.input.data[..ctx.file.size]).map_err(|e| {
-            log_error!("Unable to parse meta-data",
-                "error" => e,
-                "json_content" => json_str
+            log_error!(
+                "Unable to parse meta-data, error: {}, json_content: {}",
+                e,
+                json_str
             );
+
             MenderStatus::Failed
         })?;
 
-    log_info!("Successfully parsed meta-data",
-        "bytes_read" => bytes_read,
-        "meta_data" => meta_data.as_str()
+    log_info!(
+        "Successfully parsed meta-data, bytes read: {}, meta_data: {}",
+        bytes_read,
+        meta_data.as_str()
     );
 
     ctx.payloads.values[index].meta_data = Some(meta_data);
@@ -699,7 +697,7 @@ pub async fn mender_artifact_read_meta_data(ctx: &mut MenderArtifactContext) -> 
         ctx,
         mender_artifact_round_up(ctx.file.size, MENDER_ARTIFACT_STREAM_BLOCK_SIZE),
     ) {
-        log::error!("Unable to shift input data");
+        log_error!("Unable to shift input data");
         return Err(e);
     }
 
@@ -826,7 +824,7 @@ pub async fn mender_artifact_read_data(
 
         // Shift data in the buffer
         if let Err(e) = mender_artifact_shift_data(ctx, MENDER_ARTIFACT_STREAM_BLOCK_SIZE) {
-            log::error!("Unable to shift input data");
+            log_error!("Unable to shift input data");
             return Err(e);
         }
     }
@@ -853,7 +851,7 @@ pub async fn mender_artifact_drop_file(ctx: &mut MenderArtifactContext) -> Mende
 
         // Shift data in the buffer
         if let Err(e) = mender_artifact_shift_data(ctx, MENDER_ARTIFACT_STREAM_BLOCK_SIZE) {
-            log::error!("Unable to shift input data");
+            log_error!("Unable to shift input data");
             return Err(e);
         }
     }
@@ -878,7 +876,7 @@ pub fn mender_artifact_shift_data(
             ctx.input.length = 0;
         }
     }
-    log_info!("current input length now", "length" => ctx.input.length);
+    log_debug!("current input length now: {}", ctx.input.length);
     Ok((MenderStatus::Ok, ()))
 }
 

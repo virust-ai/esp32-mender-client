@@ -80,32 +80,22 @@ pub async fn mender_tls_init_authentication_keys(
     Ok((MenderStatus::Ok, ()))
 }
 
-// fn generate_rsa_key_pair(rng: &mut Trng<'static>) -> Result<(RsaPrivateKey, RsaPublicKey), MenderStatus> {
-//     let private_key = RsaPrivateKey::new(rng, RSA_KEY_BITS).map_err(|_| MenderStatus::Failed)?;
-//     let public_key = RsaPublicKey::from(&private_key);
-//     Ok((private_key, public_key))
-// }
-
 async fn mender_tls_generate_authentication_keys(rng: &mut Trng<'static>) -> MenderResult<()> {
     log_info!("Generating new authentication keys...");
 
     // Generate RSA key pair
     let private_key = RsaPrivateKey::new(rng, RSA_KEY_BITS).map_err(|e| {
-        log_error!("RSA key generation failed", "error" => e);
+        log_error!("RSA key generation failed, {}", e);
         MenderStatus::Failed
     })?;
 
-    //log_info!("RSA private key successfully generated.");
-
     let public_key = RsaPublicKey::from(&private_key);
-
-    //let (private_key, public_key) = generate_rsa_key_pair(rng).map_err(|_| MenderStatus::Failed)?;
 
     // Export keys in PKCS8 DER format
     let priv_key = private_key
         .to_pkcs8_der()
         .map_err(|e| {
-            log_error!("Unable to export private key", "error" => e);
+            log_error!("Unable to export private key, {}", e);
             MenderStatus::Failed
         })?
         .as_bytes()
@@ -114,7 +104,7 @@ async fn mender_tls_generate_authentication_keys(rng: &mut Trng<'static>) -> Men
     let pub_key = public_key
         .to_public_key_der()
         .map_err(|e| {
-            log_error!("Unable to export public key", "error" => e);
+            log_error!("Unable to export public key, {}", e);
             MenderStatus::Failed
         })?
         .as_bytes()
@@ -122,11 +112,19 @@ async fn mender_tls_generate_authentication_keys(rng: &mut Trng<'static>) -> Men
 
     // Validate key sizes
     if priv_key.len() > TLS_PRIVATE_KEY_LENGTH {
-        log_error!("Private key too large", "length" => priv_key.len(), "max" => TLS_PRIVATE_KEY_LENGTH);
+        log_error!(
+            "Private key too large, length: {}, max: {}",
+            priv_key.len(),
+            TLS_PRIVATE_KEY_LENGTH
+        );
         return Err(MenderStatus::Failed);
     }
     if pub_key.len() > TLS_PUBLIC_KEY_LENGTH {
-        log_error!("Public key too large", "length" => pub_key.len(), "max" => TLS_PUBLIC_KEY_LENGTH);
+        log_error!(
+            "Public key too large, length: {}, max: {}",
+            pub_key.len(),
+            TLS_PUBLIC_KEY_LENGTH
+        );
         return Err(MenderStatus::Failed);
     }
 
@@ -149,7 +147,7 @@ pub async fn mender_tls_sign_payload(payload: &str) -> MenderResult<String> {
 
     // Parse PKCS#8 DER format for RSA key
     let private_key = RsaPrivateKey::from_pkcs8_der(&priv_key_der).map_err(|e| {
-        log_error!("Unable to parse private key", "error" => e);
+        log_error!("Unable to parse private key, error: {}", e);
         MenderStatus::Failed
     })?;
 
@@ -162,14 +160,14 @@ pub async fn mender_tls_sign_payload(payload: &str) -> MenderResult<String> {
     let signature = private_key
         .sign(Pkcs1v15Sign::new::<Sha256>(), &digest)
         .map_err(|e| {
-            log_error!("Unable to sign payload", "error" => e);
+            log_error!("Unable to sign payload, error: {}", e);
             MenderStatus::Failed
         })?;
 
     // Base64 encode
     let b64_sig = base64_no_std_encode(&signature);
 
-    log_info!("Signature generated successfully", "length" => b64_sig.len());
+    log_info!("Signature generated successfully");
     Ok((MenderStatus::Ok, b64_sig))
 }
 

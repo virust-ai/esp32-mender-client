@@ -43,6 +43,7 @@ embedded-storage = "0.3.1"
 serde = { version = "1.0.217", default-features = false, features = ["derive"] }
 embedded-websocket = { version = "0.9.4", default-features = false }
 #esp-hal-ota = { version = "0.3.2", features = [ "esp32c6" ] }
+defmt = "0.3.10"
 
 [profile.dev]
 # Rust debug is too slow.

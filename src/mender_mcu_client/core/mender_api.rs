@@ -121,20 +121,20 @@ fn mender_api_print_response_error(response: Option<&str>, status: i32) {
             match serde_json_core::de::from_str::<JsonResponse>(response_str) {
                 Ok((parsed, _)) => {
                     if let Some(error) = parsed.error {
-                        log::error!("[{}] {}: {}", status, desc, error);
+                        log_error!("[{}] {}: {}", status, desc, error);
                     } else {
-                        log::error!("[{}] {}: unknown error", status, desc);
+                        log_error!("[{}] {}: unknown error", status, desc);
                     }
                 }
                 Err(_) => {
-                    log::error!("[{}] {}: unable to parse error response", status, desc);
+                    log_error!("[{}] {}: unable to parse error response", status, desc);
                 }
             }
         } else {
-            log::error!("[{}] {}: no response body", status, desc);
+            log_error!("[{}] {}: no response body", status, desc);
         }
     } else {
-        log::error!("Unknown error occurred, status={}", status);
+        log_error!("Unknown error occurred, status={}", status);
     }
 }
 
@@ -216,8 +216,7 @@ pub async fn mender_api_perform_authentication() -> MenderResult<()> {
         )
     };
 
-    log_info!("Payload String", "payload_str" => payload_str);
-    //log_info!("Payload String length", "payload_str.len()" => payload_str.len());
+    log_debug!("Payload String: {}", payload_str);
 
     // Sign payload
     let (_, signature) = mender_tls::mender_tls_sign_payload(&payload_str)
@@ -258,11 +257,11 @@ pub async fn mender_api_perform_authentication() -> MenderResult<()> {
         }
 
         let mut jwt = MENDER_API_JWT.lock().await;
-        log_info!("response_data.text", "response_data.text" => response_data.text);
+        log_debug!("response_data.text: {:?}", response_data.text);
         *jwt = response_data.text;
         Ok((MenderStatus::Ok, ()))
     } else {
-        log::error!(
+        log_error!(
             "Authentication failed with status {}: {}",
             status,
             response_data.text.unwrap_or_default()
@@ -277,7 +276,7 @@ pub fn mender_api_http_text_callback(
     response_data: Option<&mut MenderHttpResponseData>,
     _params: Option<&(dyn MenderCallback + Send + Sync)>,
 ) -> MenderResult<()> {
-    log_info!("mender_api_http_text_callback", "event" => event);
+    log_info!("mender_api_http_text_callback, event: {:?}", event);
     let response_data = response_data.ok_or(MenderStatus::Failed)?;
 
     match event {
@@ -290,13 +289,13 @@ pub fn mender_api_http_text_callback(
             })?;
 
             if data.is_empty() {
-                log_info!("data is empty");
+                log_debug!("data is empty");
                 return Ok((MenderStatus::Ok, ()));
             }
 
             // Convert data to string and append to response text
             if let Ok(text) = core::str::from_utf8(data) {
-                log_info!("received text", "text" => text, "length" => text.len());
+                log_debug!("received text: {}, length: {}", text, text.len());
                 match &mut response_data.text {
                     Some(existing) => existing.push_str(text),
                     None => response_data.text = Some(text.to_string()),
@@ -377,7 +376,7 @@ pub async fn mender_api_check_for_deployment() -> MenderResult<(String, String, 
                 log_error!("No response data");
                 MenderStatus::Failed
             })?;
-            log_info!("response_text", "response_text" => response_text);
+            log_debug!("response_text: {}", response_text);
 
             // Parse JSON response using serde_json_core
             #[derive(serde::Deserialize)]
@@ -448,7 +447,11 @@ pub async fn mender_api_publish_deployment_status(
     id: &str,
     deployment_status: DeploymentStatus,
 ) -> MenderResult<()> {
-    log_info!("mender_api_publish_deployment_status", "id" => id, "deployment_status" => deployment_status);
+    log_info!(
+        "mender_api_publish_deployment_status, id: {}, deployment_status: {}",
+        id,
+        deployment_status
+    );
     // Get JWT token
     let (_, jwt) = mender_api_get_authentication_token().await?;
 
@@ -580,7 +583,7 @@ pub async fn mender_api_http_artifact_callback(
     _response_data: Option<&mut MenderHttpResponseData>,
     params: Option<&(dyn MenderCallback + Send + Sync)>,
 ) -> MenderResult<()> {
-    log_info!("mender_api_http_artifact_callback", "event" => event);
+    log_info!("mender_api_http_artifact_callback, event: {:?}", event);
     match event {
         HttpClientEvent::Connected => {
             // Create new artifact context
@@ -603,8 +606,6 @@ pub async fn mender_api_http_artifact_callback(
                     return Err(MenderStatus::Failed);
                 }
             };
-            log_info!("data length", "data_length" => data_length);
-            log_info!("");
 
             // Get artifact context and process data
             let mut ctx_lock = MENDER_ARTIFACT_CTX.lock().await;

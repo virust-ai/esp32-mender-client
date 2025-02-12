@@ -204,7 +204,7 @@ impl KeyStore {
 }
 
 pub fn mender_utils_keystore_to_json(keystore: &KeyStore) -> MenderResult<String> {
-    log_info!("mender_utils_keystore_to_json");
+    log_debug!("mender_utils_keystore_to_json");
     // Create a fixed-capacity map for JSON serialization
     let mut json_map: FnvIndexMap<&str, &str, 16> = FnvIndexMap::new();
 
