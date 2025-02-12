@@ -33,7 +33,11 @@ impl fmt::Debug for FlashHandle {
 }
 
 pub async fn mender_flash_open(filename: &str, size: usize, chksum: &[u8]) -> MenderResult<()> {
-    log_info!("mender_flash_open", "filename" => filename, "size" => size);
+    log_info!(
+        "mender_flash_open, filename: {:?}, size: {}",
+        filename,
+        size
+    );
     let mut handle = FLASH_HANDLE.lock().await;
 
     // Check if flash is already open
@@ -46,7 +50,7 @@ pub async fn mender_flash_open(filename: &str, size: usize, chksum: &[u8]) -> Me
     let mut ota = match Ota::new(FlashStorage::new()) {
         Ok(ota) => ota,
         Err(e) => {
-            log_error!("Failed to create OTA instance", "error" => e);
+            log_error!("Failed to create OTA instance, error: {:?}", e);
             return Err(MenderStatus::Failed);
         }
     };
@@ -54,7 +58,7 @@ pub async fn mender_flash_open(filename: &str, size: usize, chksum: &[u8]) -> Me
     // Begin OTA update
     // Note: target_crc is set to 0 initially, it will be updated later if needed
     if let Err(e) = ota.ota_begin(size as u32, chksum) {
-        log_error!("Failed to begin OTA", "error" => e);
+        log_error!("Failed to begin OTA, error: {:?}", e);
         return Err(MenderStatus::Failed);
     }
 
@@ -66,12 +70,12 @@ pub async fn mender_flash_open(filename: &str, size: usize, chksum: &[u8]) -> Me
         ota,
     });
 
-    log_info!("Opened flash for :", "filename" => filename, "size" => size);
+    log_info!("Opened flash for, filename: {}, size: {}", filename, size);
     Ok((MenderStatus::Ok, ()))
 }
 
 pub async fn mender_flash_write(data: &[u8], index: usize, length: usize) -> MenderResult<()> {
-    log_info!("mender_flash_write", "index" => index, "length" => length);
+    log_info!("mender_flash_write, index: {}, length: {}", index, length);
     let mut handle = FLASH_HANDLE.lock().await;
 
     let flash = handle.as_mut().ok_or_else(|| {
@@ -81,7 +85,7 @@ pub async fn mender_flash_write(data: &[u8], index: usize, length: usize) -> Men
 
     // Validate write position
     if index != flash.current_position {
-        log_error!("Invalid write position", "flash.current_position" => flash.current_position, "index" => index);
+        log_error!("Invalid write position: {}", flash.current_position);
         return Err(MenderStatus::Failed);
     }
 
@@ -93,7 +97,7 @@ pub async fn mender_flash_write(data: &[u8], index: usize, length: usize) -> Men
 
     // Write data using OTA
     if let Err(e) = flash.ota.ota_write_chunk(data, length) {
-        log_error!("Failed to write OTA chunk", "error" => e);
+        log_error!("Failed to write OTA chunk, error: {:?}", e);
         return Err(MenderStatus::Failed);
     }
 
@@ -115,23 +119,23 @@ pub async fn mender_flash_close() -> MenderResult<()> {
     // Verify all data was written
     if flash.current_position != flash.size {
         log_error!(
-            "Incomplete write: ",
-            "flash.current_position" => flash.current_position,
-            "flash.size" => flash.size
+            "Incomplete write - current_position: {}, size: {}",
+            flash.current_position,
+            flash.size
         );
         return Err(MenderStatus::Failed);
     }
 
     log_info!(
-        "Closing flash. Wrote ",
-        "flash.current_position" => flash.current_position,
-        "flash.filename" => flash.filename
+        "Closing flash. Wrote - current_position: {}, filename: {}",
+        flash.current_position,
+        flash.filename
     );
 
     // Flush and finalize OTA
     // verify=false because we'll verify later, reboot=true to apply the update
     if let Err(e) = flash.ota.ota_flush(true) {
-        log_error!("Failed to flush OTA", "error" => e);
+        log_error!("Failed to flush OTA, error: {:?}", e);
         return Err(MenderStatus::Failed);
     }
 
@@ -144,7 +148,7 @@ pub async fn mender_flash_abort_deployment() -> MenderResult<()> {
 
     if let Some(flash) = handle.as_mut() {
         if let Err(e) = flash.ota.ota_abort() {
-            log_error!("Failed to abort OTA", "error" => e);
+            log_error!("Failed to abort OTA: {:?}", e);
         }
         // No need to explicitly abort OTA - it will be cleaned up when the handle is dropped
         *handle = None;
@@ -162,15 +166,15 @@ pub async fn mender_flash_set_pending_image() -> MenderResult<()> {
         // Verify all data was written
         if flash.current_position != flash.size {
             log_error!(
-                "Incomplete write: ",
-                "flash.current_position" => flash.current_position,
-                "flash.size" => flash.size
+                "Incomplete write - current_position: {}, size: {}",
+                flash.current_position,
+                flash.size
             );
             return Err(MenderStatus::Failed);
         }
 
         if let Err(e) = flash.ota.ota_set_pending_image(true) {
-            log_error!("Failed to set pending image", "error" => e);
+            log_error!("Failed to set pending image, {:?}", e);
         }
         *handle = None;
     }
@@ -183,13 +187,13 @@ pub fn mender_flash_confirm_image() -> MenderResult<()> {
     let mut ota = match Ota::new(FlashStorage::new()) {
         Ok(ota) => ota,
         Err(e) => {
-            log_error!("Failed to create OTA instance", "error" => e);
+            log_error!("Failed to create OTA instance, {:?}", e);
             return Err(MenderStatus::Failed);
         }
     };
 
     if let Err(e) = ota.ota_mark_app_valid() {
-        log_error!("Failed to mark app valid", "error" => e);
+        log_error!("Failed to mark app valid, {:?}", e);
         return Err(MenderStatus::Failed);
     }
 
@@ -202,7 +206,7 @@ pub fn mender_flash_is_image_confirmed() -> bool {
     let mut ota = match Ota::new(FlashStorage::new()) {
         Ok(ota) => ota,
         Err(e) => {
-            log_error!("Failed to create OTA instance", "error" => e);
+            log_error!("Failed to create OTA instance, {:?}", e);
             return false;
         }
     };

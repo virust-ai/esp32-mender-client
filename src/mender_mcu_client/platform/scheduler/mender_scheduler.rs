@@ -9,7 +9,6 @@ use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Instant, Timer};
-use esp_println::println;
 use heapless::{String, Vec};
 
 // Constants
@@ -107,9 +106,10 @@ impl MenderSchedulerWorkContext {
         self.is_executing = true;
         self.execution_count += 1;
 
-        println!(
+        log_info!(
             "Executing work '{}': Execution #{}",
-            self.params.name, self.execution_count
+            self.params.name,
+            self.execution_count
         );
 
         // Execute the work function
@@ -135,14 +135,11 @@ impl MenderSchedulerWorkContext {
 
     /// Activate the work
     async fn activate(&mut self) -> MenderStatus {
-        //println!("Attempting to acquire lock for '{}'", self.params.name);
-        //let _lock = WORK_STATUS_MUTEX.lock().await;
-        //println!("Lock acquired for '{}'", self.params.name);
         if !self.activated {
             self.activated = true;
-            println!("Work '{}' activated", self.params.name);
+            log_info!("Work '{}' activated", self.params.name);
         } else {
-            println!("Work '{}' is already activated", self.params.name);
+            log_info!("Work '{}' is already activated", self.params.name);
         }
         Ok(())
     }
@@ -159,7 +156,7 @@ impl MenderSchedulerWorkContext {
                 }
             }
             self.activated = false;
-            println!("Work '{}' deactivated", self.params.name);
+            log_info!("Work '{}' deactivated", self.params.name);
             Ok(())
         } else {
             Err("Work is not activated")
@@ -171,7 +168,7 @@ impl MenderSchedulerWorkContext {
     async fn set_period(&mut self, period: u32) -> MenderStatus {
         //let _lock = WORK_STATUS_MUTEX.lock().await;
         self.params.period = period;
-        println!("Work '{}' period set to {}s", self.params.name, period);
+        log_info!("Work '{}' period set to {}s", self.params.name, period);
         Ok(())
     }
 }
@@ -185,12 +182,12 @@ impl Scheduler {
     }
 
     pub fn init(&'static self, spawner: Spawner) -> Result<(), &'static str> {
-        println!("Initializing scheduler...");
+        log_info!("Initializing scheduler...");
         if spawner.spawn(work_queue_task()).is_err() {
-            println!("Failed to spawn work queue task");
+            log_error!("Failed to spawn work queue task");
             return Err("Failed to spawn work queue task");
         }
-        println!("Scheduler initialized successfully");
+        log_info!("Scheduler initialized successfully");
         Ok(())
     }
 
@@ -199,7 +196,7 @@ impl Scheduler {
         params: MenderSchedulerWorkParams,
     ) -> Result<MenderSchedulerWorkContext, &'static str> {
         let work = MenderSchedulerWorkContext::new(params);
-        println!("Created work '{}'", work.params.name);
+        log_info!("Created work '{}'", work.params.name);
         Ok(work)
     }
 
@@ -207,9 +204,10 @@ impl Scheduler {
         &self,
         work: MenderSchedulerWorkContext,
     ) -> Result<(), &'static str> {
-        println!(
+        log_info!(
             "Scheduling work '{}' with period: {}s",
-            work.params.name, work.params.period
+            work.params.name,
+            work.params.period
         );
         self.work_queue.send(SchedulerCommand::AddWork(work)).await;
         Ok(())
@@ -218,7 +216,7 @@ impl Scheduler {
     pub async fn delete_work(&self, name: &str) -> Result<(), &'static str> {
         let mut fixed_name = String::new();
         fixed_name.push_str(name).map_err(|_| "Name too long")?;
-        println!("Deleting work '{}'", name);
+        log_info!("Deleting work '{}'", name);
         self.work_queue
             .send(SchedulerCommand::RemoveWork(fixed_name))
             .await;
@@ -226,7 +224,7 @@ impl Scheduler {
     }
 
     pub async fn delete_all_works(&self) -> Result<(), &'static str> {
-        println!("Removing all scheduled works");
+        log_info!("Removing all scheduled works");
         self.work_queue.send(SchedulerCommand::RemoveAllWorks).await;
         Ok(())
     }
@@ -235,7 +233,7 @@ impl Scheduler {
 /// Main work queue task that processes all works
 #[embassy_executor::task]
 async fn work_queue_task() {
-    println!("Work queue task started");
+    log_info!("Work queue task started");
     let mut works: Vec<MenderSchedulerWorkContext, CONFIG_MENDER_SCHEDULER_WORK_QUEUE_LENGTH> =
         Vec::new();
 
@@ -246,26 +244,26 @@ async fn work_queue_task() {
                 SchedulerCommand::AddWork(work) => {
                     // Check if work with same name already exists
                     if works.iter().any(|w| w.params.name == work.params.name) {
-                        println!("Work '{}' already in queue", work.params.name);
+                        log_info!("Work '{}' already in queue", work.params.name);
                     } else if works.push(work).is_err() {
-                        println!("Work queue is full");
+                        log_warn!("Work queue is full");
                     }
                 }
                 SchedulerCommand::RemoveWork(name) => {
                     if let Some(pos) = works.iter().position(|w| w.params.name == name) {
                         works.remove(pos);
-                        println!("Work '{}' removed from scheduler", name);
+                        log_info!("Work '{}' removed from scheduler", name);
                     }
                 }
                 SchedulerCommand::RemoveAllWorks => {
                     works.clear();
-                    println!("All works removed from scheduler");
+                    log_info!("All works removed from scheduler");
                 }
 
                 SchedulerCommand::SetPeriod(name, new_period) => {
                     if let Some(work) = works.iter_mut().find(|w| w.params.name == name) {
                         work.params.period = new_period;
-                        println!("Work '{}' period updated to {}s", name, new_period);
+                        log_info!("Work '{}' period updated to {}s", name, new_period);
                     }
                 }
             }
@@ -275,7 +273,7 @@ async fn work_queue_task() {
         for work in works.iter_mut() {
             if work.should_execute() {
                 if let Err(e) = work.execute().await {
-                    println!("Work '{}' failed: {}", work.params.name, e);
+                    log_error!("Work '{}' failed: {}", work.params.name, e);
                 }
             }
         }
@@ -301,7 +299,7 @@ pub async fn mender_scheduler_work_create(
     period: u32,
     name: &'static str,
 ) -> Result<MenderSchedulerWorkContext, &'static str> {
-    log_info!("mender_scheduler_work_create", "name" => name);
+    log_info!("mender_scheduler_work_create for {}", name);
     let params = MenderSchedulerWorkParams::new(function, period, name)?;
     SCHEDULER.create_work(params).await
 }
@@ -310,7 +308,7 @@ pub async fn mender_scheduler_work_create(
 pub async fn mender_scheduler_work_activate(
     work: &mut MenderSchedulerWorkContext,
 ) -> Result<(), &'static str> {
-    log_info!("mender_scheduler_work_activate", "name" => work.params.name);
+    log_info!("mender_scheduler_work_activate for {}", work.params.name);
     work.activate().await?;
     SCHEDULER.schedule_work(work.clone()).await
 }
@@ -319,7 +317,7 @@ pub async fn mender_scheduler_work_activate(
 pub async fn mender_scheduler_work_deactivate(
     work: &mut MenderSchedulerWorkContext,
 ) -> Result<(), &'static str> {
-    log_info!("mender_scheduler_work_deactivate", "name" => work.params.name);
+    log_info!("mender_scheduler_work_deactivate for {}", work.params.name);
     work.deactivate().await
 }
 
@@ -333,9 +331,10 @@ pub async fn mender_scheduler_work_set_period(
     fixed_name
         .push_str(&work.params.name)
         .map_err(|_| "Name too long")?;
-    println!(
+    log_info!(
         "Setting period for work '{}' to {}s",
-        work.params.name, period
+        work.params.name,
+        period
     );
     WORK_QUEUE
         .send(SchedulerCommand::SetPeriod(fixed_name, period))
@@ -346,7 +345,7 @@ pub async fn mender_scheduler_work_set_period(
 pub async fn mender_scheduler_work_execute(
     work: &MenderSchedulerWorkContext,
 ) -> Result<(), &'static str> {
-    log_info!("mender_scheduler_work_execute", "name" => work.params.name);
+    log_info!("mender_scheduler_work_execute for {}", work.params.name);
     SCHEDULER.schedule_work(work.clone()).await
 }
 
@@ -359,7 +358,7 @@ pub async fn mender_scheduler_work_execute(
 pub async fn mender_scheduler_work_delete(
     work: &MenderSchedulerWorkContext,
 ) -> Result<(), &'static str> {
-    log_info!("mender_scheduler_work_delete", "name" => work.params.name);
+    log_info!("mender_scheduler_work_delete for {}", work.params.name);
     SCHEDULER.delete_work(&work.params.name).await
 }
 

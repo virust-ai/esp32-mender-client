@@ -58,7 +58,7 @@ pub async fn mender_inventory_api_publish_inventory_data(
     }
 
     let payload = format!("[{}]", object);
-    log_info!("payload:", "payload" => payload);
+    log_debug!("payload: {}", payload);
 
     let (_, jwt) = mender_api_get_authentication_token().await?;
     let my_text_callback = MyTextCallback;

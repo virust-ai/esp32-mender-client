@@ -88,7 +88,7 @@ fn authentication_success_cb() -> MenderResult<()> {
     /* Note it is possible to do multiple diagnosic tests before validating the image */
     /* In this example, authentication success with the mender-server is enough */
     if let Err(e) = mender_flash_confirm_image() {
-        log_error!("Failed to confirm image", "error" => e);
+        log_error!("Failed to confirm image, error: {:?}", e);
         return Err(MenderStatus::Failed);
     }
     Ok((MenderStatus::Ok, ()))
@@ -104,8 +104,12 @@ fn authentication_failure_cb() -> MenderResult<()> {
     Ok((MenderStatus::Ok, ()))
 }
 
-fn deployment_status_cb(_status: DeploymentStatus, message: Option<&str>) -> MenderResult<()> {
-    log_info!("deployment_status_cb", "status" => _status, "message" => message.unwrap_or(""));
+fn deployment_status_cb(status: DeploymentStatus, message: Option<&str>) -> MenderResult<()> {
+    log_info!(
+        "deployment_status_cb, status: {}, message: {}",
+        status,
+        message.unwrap_or("")
+    );
 
     Ok((MenderStatus::Ok, ()))
 }
@@ -184,7 +188,7 @@ async fn main(spawner: Spawner) -> ! {
     let mut ota = match Ota::new(FlashStorage::new()) {
         Ok(ota) => ota,
         Err(e) => {
-            log_error!("Failed to create OTA instance", "error" => e);
+            log_error!("Failed to create OTA instance, error: {:?}", e);
             panic!("Failed to create OTA instance");
         }
     };
@@ -192,9 +196,9 @@ async fn main(spawner: Spawner) -> ! {
     // Log current partition info
     if let Some(part) = ota.get_currently_booted_partition() {
         log_info!(
-            "Running from partition",
-            "partition" => format_args!("ota_{}", part),
-            "base" => format_args!("0x{:x}", if part == 0 { 0x10000 } else { 0x1c0000 })
+            "Running from partition: {}, base: {}",
+            format_args!("ota_{}", part),
+            format_args!("0x{:x}", if part == 0 { 0x10000 } else { 0x1c0000 })
         );
     }
 
@@ -219,16 +223,16 @@ async fn main(spawner: Spawner) -> ! {
         Timer::after(Duration::from_millis(500)).await;
     }
 
-    println!("Waiting to get IP address...");
+    log_info!("Waiting to get IP address...");
     loop {
         if let Some(config) = stack.config_v4() {
-            println!("Got IP: {}", config.address);
+            log_info!("Got IP: {}", config.address);
             break;
         }
         Timer::after(Duration::from_millis(500)).await;
     }
 
-    println!("Starting async main...");
+    log_info!("Starting async main...");
 
     let mac_address = Efuse::mac_address();
     let mac_str = format!(
@@ -344,7 +348,9 @@ async fn main(spawner: Spawner) -> ! {
     }
 
     match mender_client_activate().await {
-        MenderStatus::Done => println!("Client activated successfully"),
+        MenderStatus::Done => {
+            log_info!("Client activated successfully");
+        }
         _ => panic!("Failed to activate client"),
     };
 
@@ -358,9 +364,8 @@ async fn connection(
     mut controller: WifiController<'static>,
     //stack: &'static Stack<WifiDevice<'static, WifiStaDevice>>,
 ) {
-    log::info!("start connection task");
-    log::info!("Device capabilities: {:?}", controller.capabilities());
-    log::info!("turn off power saving mode");
+    log_info!("start connection task");
+    log_info!("turn off power saving mode");
     controller
         .set_power_saving(esp_wifi::config::PowerSaveMode::None)
         .unwrap();
@@ -377,15 +382,15 @@ async fn connection(
                 ..Default::default()
             });
             controller.set_configuration(&client_config).unwrap();
-            log::info!("Starting wifi");
+            log_info!("Starting wifi");
             controller.start_async().await.unwrap();
-            log::info!("Wifi started!");
+            log_info!("Wifi started!");
         }
-        log::info!("About to connect...");
+        log_info!("About to connect...");
 
         match controller.connect_async().await {
             Ok(_) => {
-                log::info!("Wifi connected!");
+                log_info!("Wifi connected!");
 
                 // loop {
                 //     if stack.is_link_up() {
@@ -395,7 +400,7 @@ async fn connection(
                 // }
             }
             Err(e) => {
-                log::info!("Failed to connect to wifi: {e:?}");
+                log_error!("Failed to connect to wifi: {:?}", e);
                 Timer::after(Duration::from_millis(5000)).await
             }
         }

@@ -119,7 +119,7 @@ async fn try_dns_query(stack: &Stack<'static>, host: &str) -> Result<IpAddress, 
 
     for attempt in 0..DNS_RETRY_COUNT {
         if attempt > 0 {
-            log_info!("Retrying DNS query", "attempt" => attempt + 1);
+            log_info!("Retrying DNS query, attempt: {}", attempt + 1);
             // Add delay between retries
             embassy_time::Timer::after(embassy_time::Duration::from_millis(500)).await;
         }
@@ -132,29 +132,20 @@ async fn try_dns_query(stack: &Stack<'static>, host: &str) -> Result<IpAddress, 
         {
             Ok(Ok(addrs)) => {
                 if let Some(&addr) = addrs.first() {
-                    log_info!("DNS query successful",
-                        "host" => host,
-                        "addr" => addr,
-                        "attempt" => attempt + 1
-                    );
+                    log_info!("DNS query successful, host: {}, addr: {}", host, addr);
                     return Ok(addr);
                 }
             }
             Ok(Err(e)) => {
-                log_error!("DNS query failed",
-                    "error" => format_args!("{:?}", e),
-                    "attempt" => attempt + 1
-                );
+                log_error!("DNS query failed: {}", format_args!("{:?}", e));
             }
             Err(_) => {
-                log_error!("DNS query timeout",
-                    "attempt" => attempt + 1
-                );
+                log_error!("DNS query timeout, attempt: {}", attempt + 1);
             }
         }
     }
 
-    log_error!("All DNS query attempts failed", "host" => host);
+    log_error!("All DNS query attempts failed, host: {}", host);
     Err(MenderStatus::Network)
 }
 
@@ -175,9 +166,6 @@ pub async fn connect_to_host<'a>(
         (url, HTTP_DEFAULT_PORT)
     };
 
-    // log_info!("host", "host" => host);
-    // log_info!("port", "port" => port);
-
     // Remove path portion from host if present
     let host = host.split('/').next().ok_or(MenderStatus::Other)?;
 
@@ -194,16 +182,16 @@ pub async fn connect_to_host<'a>(
     }
 
     let addr = if let Some(cached_addr) = get_cached_conn_info(host).await {
-        log_info!("Using cached connection info", "host" => host);
+        log_debug!("Using cached connection info, host: {}", host);
         cached_addr
     } else {
-        log_info!("Starting DNS query for host", "host" => host);
+        log_info!("Starting DNS query for host: {}", host);
         let resolved_addr = try_dns_query(&stack, host).await?;
         cache_conn_info(host.to_string(), resolved_addr).await;
         resolved_addr
     };
 
-    log_info!("DNS lookup successful", "addr" => addr);
+    log_info!("DNS lookup successful, addr: {}", addr);
 
     // Create a new socket using the inner Stack reference
     let mut socket = TcpSocket::new(stack, rx_buf, tx_buf);
@@ -219,10 +207,10 @@ pub async fn connect_to_host<'a>(
     .await
     {
         Ok(Ok(_)) => {
-            log_info!("Connected to host", "host" => host, "port" => port);
+            log_info!("Connected to host: {}, port: {}", host, port);
         }
         Ok(Err(e)) => {
-            log_error!("Socket connect error", "error" => e);
+            log_error!("Socket connect error: {:?}", e);
             return Err(MenderStatus::Other);
         }
         Err(_) => {
@@ -259,10 +247,13 @@ pub async fn connect_to_host<'a>(
     {
         Ok(Ok(_)) => {
             let duration = start.elapsed();
-            log_info!("TLS handshake succeeded", "duration_ms" => duration.as_millis());
+            log_debug!(
+                "TLS handshake succeeded, duration_ms: {}",
+                duration.as_millis()
+            );
         }
         Ok(Err(e)) => {
-            log_error!("TLS handshake failed", "error" => e);
+            log_error!("TLS handshake failed: {:?}", e);
             return Err(MenderStatus::Network);
         }
         Err(_) => {
@@ -270,7 +261,7 @@ pub async fn connect_to_host<'a>(
             return Err(MenderStatus::Network);
         }
     }
-    log_info!("TLS connection established", "host" => host, "port" => port);
+    log_info!("TLS connection established, host: {}, port: {}", host, port);
 
     Ok(tls_conn)
 }
@@ -357,10 +348,12 @@ pub async fn mender_http_perform(params: HttpRequestParams<'_>) -> Result<(), Me
                 match e {
                     MenderStatus::Network => {
                         if retry_count < MAX_RETRIES - 1 {
-                            log_warn!("Network error, retrying",
-                                "attempt" => retry_count + 1,
-                                "error" => e,
+                            log_warn!(
+                                "Network error, retrying attempt: {}, error: {:?}",
+                                retry_count + 1,
+                                e
                             );
+
                             // Add exponential backoff
                             embassy_time::Timer::after(embassy_time::Duration::from_millis(
                                 500 * (2_u64.pow(retry_count as u32)),
@@ -373,7 +366,7 @@ pub async fn mender_http_perform(params: HttpRequestParams<'_>) -> Result<(), Me
                     }
                     // For any other error type, return immediately
                     _ => {
-                        log_error!("Non-network error occurred", "error" => e);
+                        log_error!("Non-network error {:?} occurred", e);
                         return Err(e);
                     }
                 }
@@ -410,7 +403,7 @@ async fn try_http_request<'a>(
         path.to_string()
     };
 
-    log_info!("url", "url" => url);
+    log_debug!("url: {}", url);
 
     let mut read_record_buffer = [0u8; 16640];
     let mut write_record_buffer = [0u8; 4096];
@@ -436,10 +429,10 @@ async fn try_http_request<'a>(
             || path.contains("cloudflarestorage.com")
             || path.contains("mender-artifact-storage"));
 
-    log_info!("is_download", "is_download" => is_download);
+    log_debug!("is_download: {}", is_download);
 
     'retry_loop: while retry_count < MAX_RETRIES {
-        log_info!("retry_count", "retry_count" => retry_count);
+        log_info!("retry_count: {}", retry_count);
         let mut tls_conn = connect_to_host(
             &url,
             &mut rx_buf,
@@ -458,7 +451,7 @@ async fn try_http_request<'a>(
             headers = headers.trim_end_matches("\r\n").to_string();
             headers.push_str(&format!("Range: bytes={}-\r\n", bytes_received));
             headers.push_str("\r\n");
-            log_info!("Resuming download from byte", "bytes_received" => bytes_received);
+            log_info!("Resuming download from byte: {}", bytes_received);
         }
 
         if (tls_conn.write_all(headers.as_bytes()).await).is_err() {
@@ -475,7 +468,7 @@ async fn try_http_request<'a>(
         }
 
         if let Err(e) = tls_conn.flush().await {
-            log_error!("Unable to flush headers", "error" => e);
+            log_error!("Unable to flush headers, error: {:?}", e);
             if !is_download {
                 return Err(MenderStatus::Network);
             }
@@ -490,7 +483,7 @@ async fn try_http_request<'a>(
         // Write payload if present (only on first attempt or non-download requests)
         if payload.is_some() && (!is_download || bytes_received == 0) {
             if let Err(e) = tls_conn.write_all(payload.unwrap().as_bytes()).await {
-                log_error!("Unable to write payload", "error" => e);
+                log_error!("Unable to write payload, error: {:?}", e);
                 if !is_download {
                     return Err(MenderStatus::Network);
                 }
@@ -502,7 +495,7 @@ async fn try_http_request<'a>(
                 continue 'retry_loop;
             }
             if let Err(e) = tls_conn.flush().await {
-                log_error!("Unable to flush payload", "error" => e);
+                log_error!("Unable to flush payload, error: {:?}", e);
                 if !is_download {
                     return Err(MenderStatus::Network);
                 }
@@ -532,13 +525,6 @@ async fn try_http_request<'a>(
 
         #[allow(unused_labels)]
         'read_loop: loop {
-            // log_info!("Attempting to read from TLS connection",
-            //     "elapsed_ms" => start_time.elapsed().as_millis(),
-            //     "headers_done" => headers_done,
-            //     "bytes_received" => bytes_received,
-            //     "content_length" => content_length
-            // );
-
             match embassy_time::with_timeout(timeout_duration, tls_conn.read(&mut buffer)).await {
                 Ok(Ok(0)) => {
                     log_info!("Connection closed by server");
@@ -593,11 +579,7 @@ async fn try_http_request<'a>(
                                             let available = n - current_pos;
                                             let to_read = remaining.min(available);
 
-                                            log_info!("Continuing partial chunk",
-                                                "remaining" => remaining,
-                                                "available" => available,
-                                                "to_read" => to_read
-                                            );
+                                            log_debug!("Continuing partial chunk, remaining: {}, available: {}, to_read: {}", remaining, available, to_read);
 
                                             callback
                                                 .call(
@@ -624,10 +606,14 @@ async fn try_http_request<'a>(
                                         } else if let Some((chunk_size, header_len)) =
                                             parse_chunk_size(&buffer[current_pos..n])
                                         {
-                                            log_info!("Chunk info", "size" => chunk_size, "header_len" => header_len);
+                                            log_debug!(
+                                                "Chunk info, size: {}, header_len: {}",
+                                                chunk_size,
+                                                header_len
+                                            );
                                             if chunk_size == 0 {
                                                 // Last chunk received
-                                                log_info!("Last chunk received");
+                                                log_debug!("Last chunk received");
                                                 return Ok(());
                                             }
                                             current_pos += header_len;
@@ -635,7 +621,10 @@ async fn try_http_request<'a>(
 
                                             if available >= chunk_size {
                                                 // Full chunk available
-                                                log_info!("Processing full chunk", "size" => chunk_size);
+                                                log_debug!(
+                                                    "Processing full chunk, size: {}",
+                                                    chunk_size
+                                                );
                                                 callback
                                                     .call(
                                                         HttpClientEvent::DataReceived,
@@ -650,10 +639,8 @@ async fn try_http_request<'a>(
                                                 current_pos += chunk_size + 2; // Skip chunk data and \r\n
                                             } else {
                                                 // Partial chunk
-                                                log_info!("Starting partial chunk",
-                                                    "size" => chunk_size,
-                                                    "available" => available
-                                                );
+                                                log_debug!("Starting partial chunk, size: {}, available: {}", chunk_size, available);
+
                                                 callback
                                                     .call(
                                                         HttpClientEvent::DataReceived,
@@ -673,11 +660,14 @@ async fn try_http_request<'a>(
                                     }
                                 }
                                 TransferEncoding::ContentLength(length) => {
-                                    log_info!("Content-Length response", "length" => length);
+                                    log_debug!("Content-Length response, length: {}", length);
                                     content_length = Some(length);
                                     if headers_end < n {
                                         let data_length = n - headers_end;
-                                        log_info!("Processing initial data", "length" => data_length);
+                                        log_debug!(
+                                            "Processing initial data, length: {}",
+                                            data_length
+                                        );
                                         callback
                                             .call(
                                                 HttpClientEvent::DataReceived,
@@ -687,7 +677,11 @@ async fn try_http_request<'a>(
                                             )
                                             .await?;
                                         bytes_received += data_length;
-                                        log_info!("Progress", "received" => bytes_received, "total" => length);
+                                        log_debug!(
+                                            "Progress, received: {}, total: {}",
+                                            bytes_received,
+                                            length
+                                        );
                                     }
                                 }
                                 TransferEncoding::Unknown => {
@@ -706,7 +700,7 @@ async fn try_http_request<'a>(
                         }
                     } else if let Some(length) = content_length {
                         // Handle Content-Length response data
-                        log_info!("Processing data chunk", "length" => n);
+                        log_debug!("Processing data chunk, length: {}", n);
                         callback
                             .call(
                                 HttpClientEvent::DataReceived,
@@ -716,15 +710,15 @@ async fn try_http_request<'a>(
                             )
                             .await?;
                         bytes_received += n;
-                        log_info!("Progress", "received" => bytes_received, "total" => length);
+                        log_debug!("Progress, received: {}, total: {}", bytes_received, length);
 
                         if bytes_received >= length {
-                            log_info!("Response complete");
+                            log_debug!("Response complete");
                             let _ = tls_conn.close().await;
                             break 'retry_loop;
                         }
                     } else {
-                        log_error!("Processing data chunk in a loop", "length" => n);
+                        log_error!("Processing data chunk in a loop, length: {}", n);
                         // Similar changes for the subsequent reads after headers
                         let mut current_pos = 0;
                         while current_pos < n {
@@ -734,11 +728,7 @@ async fn try_http_request<'a>(
                                 let available = n - current_pos;
                                 let to_read = remaining.min(available);
 
-                                log_info!("Continuing partial chunk",
-                                    "remaining" => remaining,
-                                    "available" => available,
-                                    "to_read" => to_read
-                                );
+                                log_debug!("Continuing partial chunk, remaining: {}, available: {}, to_read: {}", remaining, available, to_read);
 
                                 callback
                                     .call(
@@ -763,17 +753,26 @@ async fn try_http_request<'a>(
                             } else if let Some((chunk_size, header_len)) =
                                 parse_chunk_size(&buffer[current_pos..n])
                             {
-                                log_info!("Processing chunk", "size" => chunk_size, "header_len" => header_len);
+                                log_debug!(
+                                    "Processing chunk, size: {}, header_len: {}",
+                                    chunk_size,
+                                    header_len
+                                );
                                 if chunk_size == 0 {
                                     let _ = tls_conn.close().await;
                                     // Last chunk received
-                                    log_info!("Last chunk received");
+                                    log_debug!("Last chunk received");
                                     break 'retry_loop;
                                 }
                                 current_pos += header_len;
                                 let chunk_end = current_pos + chunk_size;
                                 if chunk_end <= n {
-                                    log_info!("Processing chunk data", "size" => chunk_size, "data" => core::str::from_utf8(&buffer[current_pos..chunk_end]).unwrap_or("invalid utf8"));
+                                    log_debug!(
+                                        "Processing chunk data, size: {}, data: {}",
+                                        chunk_size,
+                                        core::str::from_utf8(&buffer[current_pos..chunk_end])
+                                            .unwrap_or("invalid utf8")
+                                    );
                                     callback
                                         .call(
                                             HttpClientEvent::DataReceived,
@@ -786,7 +785,11 @@ async fn try_http_request<'a>(
                                     current_pos = chunk_end + 2; // Skip the trailing \r\n
                                 } else {
                                     // Partial chunk received, need more data
-                                    log_info!("Partial chunk", "available" => n - current_pos, "needed" => chunk_size);
+                                    log_debug!(
+                                        "Partial chunk, available: {}, needed: {}",
+                                        n - current_pos,
+                                        chunk_size
+                                    );
                                     callback
                                         .call(
                                             HttpClientEvent::DataReceived,
@@ -813,7 +816,7 @@ async fn try_http_request<'a>(
                     // }
                 }
                 Ok(Err(e)) => {
-                    log_error!("TLS read error", "error" => e);
+                    log_error!("TLS read error: {:?}", e);
 
                     let _ = tls_conn.close().await;
 
@@ -825,9 +828,9 @@ async fn try_http_request<'a>(
                         _ => {
                             if let Some(length) = content_length {
                                 if bytes_received < length {
-                                    log_warn!("Incomplete data received, retrying...",
-                                        "received" => bytes_received,
-                                        "total" => length
+                                    log_warn!("Incomplete data received, received: {}, total: {}, retrying...",
+                                        bytes_received,
+                                        length
                                     );
                                     retry_count += 1;
                                     embassy_time::Timer::after(
@@ -942,7 +945,7 @@ fn build_header_request(
 
     request.push_str("\r\n");
 
-    log_info!("request", "request" => request);
+    log_debug!("request: {}", request);
     Ok(request)
 }
 
@@ -962,7 +965,7 @@ fn parse_headers(data: &[u8]) -> Option<(usize, i32)> {
 
     // Parse status line (e.g., "HTTP/1.1 200 OK")
     let headers = core::str::from_utf8(&data[..headers_end]).ok()?;
-    log_info!("headers", "headers" => headers, "headers_end" => headers_end);
+    log_debug!("headers: {}, headers_end: {}", headers, headers_end);
     let status_line = headers.lines().next()?;
     let status_code = status_line.split_whitespace().nth(1)?.parse::<i32>().ok()?;
 

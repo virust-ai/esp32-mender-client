@@ -58,7 +58,7 @@ pub async fn mender_configure_api_download_configuration_data() -> MenderResult<
             Err(MenderStatus::Failed)
         }
     } else {
-        log_error!("Unexpected status code:", "status" => status);
+        log_error!("Unexpected status code: {}", status);
         Err(MenderStatus::Failed)
     }
 }
@@ -104,7 +104,7 @@ pub async fn mender_configure_api_publish_configuration_data(
     if status == 204 {
         Ok((MenderStatus::Ok, ()))
     } else {
-        log_error!("Unexpected status code:", "status" => status);
+        log_error!("Unexpected status code: {}", status);
         Err(MenderStatus::Failed)
     }
 }
