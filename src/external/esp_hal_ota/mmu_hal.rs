@@ -1,6 +1,7 @@
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
 
+#[allow(dead_code)]
 pub const MMU_PAGE_8KB: u32 = 0x2000;
 pub const MMU_PAGE_16KB: u32 = 0x4000;
 pub const MMU_PAGE_32KB: u32 = 0x8000;
@@ -42,7 +43,6 @@ pub fn esp_get_current_running_partition(partitions: &[(u32, u32)]) -> Option<us
 
     let paddr_base = super::mmu_ll::mmu_ll_entry_id_to_paddr_base(mmu_id, entry_id);
     let paddr = paddr_base | offset;
-
 
     for (i, &part) in partitions.iter().enumerate() {
         if paddr >= part.0 && paddr < part.0 + part.1 {

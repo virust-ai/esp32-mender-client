@@ -67,6 +67,12 @@ pub struct KeyStore {
     pub items: HVec<KeyStoreItem, MAX_STRING_SIZE>,
 }
 
+impl Default for KeyStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeyStore {
     pub fn new() -> Self {
         KeyStore { items: HVec::new() }

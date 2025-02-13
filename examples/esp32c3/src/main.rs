@@ -2,16 +2,6 @@
 #![no_main]
 
 extern crate alloc;
-
-mod custom;
-mod global_variables;
-mod external {
-    pub mod esp_hal_ota {
-        // Include the contents of lib.rs here
-        include!("external/esp_hal_ota/lib.rs");
-    }
-}
-
 use alloc::boxed::Box;
 use alloc::format;
 use embassy_executor::Spawner;
@@ -32,22 +22,22 @@ use esp_wifi::{
     EspWifiController,
 };
 
-use external::esp_hal_ota::OtaImgState;
+use esp32_mender_client::external::esp_hal_ota::OtaImgState;
+use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_confirm_image;
+use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_is_image_confirmed;
 use heapless::String as HString;
-use mender_mcu_client::platform::flash::mender_flash::mender_flash_confirm_image;
-use mender_mcu_client::platform::flash::mender_flash::mender_flash_is_image_confirmed;
-mod mender_mcu_client;
-use crate::external::esp_hal_ota::Ota;
-use crate::mender_mcu_client::add_ons::inventory::mender_inventory::{
+
+use esp32_mender_client::external::esp_hal_ota::Ota;
+use esp32_mender_client::mender_mcu_client::add_ons::inventory::mender_inventory::{
     MenderInventoryConfig, MENDER_INVENTORY_ADDON_INSTANCE,
 };
-use crate::mender_mcu_client::core::mender_client::{
+use esp32_mender_client::mender_mcu_client::core::mender_client::{
     mender_client_activate, mender_client_init, MenderClientCallbacks, MenderClientConfig,
 };
-use crate::mender_mcu_client::core::mender_utils::{
+use esp32_mender_client::mender_mcu_client::core::mender_utils::{
     DeploymentStatus, KeyStore, KeyStoreItem, MenderResult, MenderStatus,
 };
-use mender_mcu_client::{
+use esp32_mender_client::mender_mcu_client::{
     add_ons::inventory::mender_inventory,
     core::mender_client,
     platform::scheduler::mender_scheduler::{
@@ -55,6 +45,8 @@ use mender_mcu_client::{
         mender_scheduler_work_set_period, MenderFuture,
     },
 };
+#[allow(unused_imports)]
+use esp32_mender_client::{log_debug, log_error, log_info, log_warn};
 
 const WIFI_SSID: &str = env!("MENDER_CLIENT_WIFI_SSID");
 const WIFI_PSK: &str = env!("MENDER_CLIENT_WIFI_PSK");
@@ -149,7 +141,7 @@ async fn main(spawner: Spawner) -> ! {
         config.cpu_clock = CpuClock::max();
         config
     });
-    esp_alloc::heap_allocator!(120 * 1024);
+    esp_alloc::heap_allocator!(91 * 1024);
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     let timg1 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timg1.timer0);
@@ -255,8 +247,8 @@ async fn main(spawner: Spawner) -> ! {
     let config = MenderClientConfig::new(
         identity,
         "artifact-1.0",
-        "esp32c6",
-        option_env!("MENDER_CLIENT_URL").unwrap_or("https://mender.bluleap.ai"),
+        "esp32c3",
+        option_env!("MENDER_CLIENT_URL").unwrap_or("https://hosted.mender.io"),
         tenant_token,
     )
     .with_recommissioning(false);

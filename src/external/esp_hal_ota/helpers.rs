@@ -15,7 +15,6 @@ pub fn seq_or_default(seq: &[u8], crc: u32, default: u32) -> u32 {
         return u32::from_le_bytes(seq.try_into().expect("Wrong size?"));
     }
 
-
     default
 }
 
@@ -32,5 +31,4 @@ pub fn is_crc_seq_correct(seq: u32, crc: u32) -> bool {
 
     let crc_calc = super::crc32::calc_crc32(&bytes, 0xFFFFFFFF);
     crc == crc_calc
-
 }

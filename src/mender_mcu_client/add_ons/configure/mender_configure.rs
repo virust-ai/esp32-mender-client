@@ -124,7 +124,7 @@ async fn mender_configure_work_function() -> MenderResult<()> {
             Ok(configuration) => {
                 // Update device configuration
                 let mut keystore = MENDER_CONFIGURE_KEYSTORE.lock().await;
-                *keystore = Some(configuration);
+                *keystore = Some(configuration.1); // Extract the KeyStore (second element) from the tuple
 
                 // Invoke the update callback
                 if let Some(callbacks) = MENDER_CONFIGURE_CALLBACKS.lock().await.as_ref() {

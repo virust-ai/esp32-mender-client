@@ -1,10 +1,9 @@
-use sha2::Sha256;
 use super::helpers;
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
+use sha2::Sha256;
 
 pub(crate) type Result<T> = core::result::Result<T, OtaError>;
-
 
 #[derive(Debug, PartialEq)]
 pub enum OtaError {
@@ -17,7 +16,6 @@ pub enum OtaError {
     CannotFindCurrentBootPartition,
     InvalidChecksum,
 }
-
 
 #[derive(Clone)]
 pub struct FlashProgress {
@@ -67,5 +65,4 @@ impl EspOtaSelectEntry {
             self.seq = 0; // set seq to 0 if crc not correct!
         }
     }
-
 }

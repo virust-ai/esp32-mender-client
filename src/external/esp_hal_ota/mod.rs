@@ -1,15 +1,16 @@
-use embedded_storage::{ReadStorage, Storage};
-use sha2::{Sha256, Digest};
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
+use embedded_storage::{ReadStorage, Storage};
+use sha2::{Digest, Sha256};
 
 pub use structs::*;
 
-pub mod crc32;
-pub mod helpers;
-pub mod mmu_hal;
-pub mod mmu_ll;
-pub mod structs;
+// Include module files directly
+mod crc32;
+mod helpers;
+mod mmu_hal;
+mod mmu_ll;
+mod structs;
 
 const PART_OFFSET: u32 = 0x8000;
 const PART_SIZE: u32 = 0xc00;
@@ -55,14 +56,13 @@ where
         let next_part = self.get_next_ota_partition().unwrap_or(0);
 
         // Convert hex string to bytes
-        let chksum_str = core::str::from_utf8(chksum)
-            .map_err(|_| OtaError::InvalidChecksum)?;
-        
+        let chksum_str = core::str::from_utf8(chksum).map_err(|_| OtaError::InvalidChecksum)?;
+
         let mut target_hash = [0u8; 32];
         for i in 0..32 {
-            let byte_str = &chksum_str[i*2..i*2+2];
-            target_hash[i] = u8::from_str_radix(byte_str, 16)
-                .map_err(|_| OtaError::InvalidChecksum)?;
+            let byte_str = &chksum_str[i * 2..i * 2 + 2];
+            target_hash[i] =
+                u8::from_str_radix(byte_str, 16).map_err(|_| OtaError::InvalidChecksum)?;
         }
 
         log_debug!("[OTA] Received hash: {:?}", target_hash);
@@ -81,18 +81,16 @@ where
     }
 
     pub fn ota_abort(&mut self) -> Result<()> {
-        let progress = self
-            .progress
-            .clone()
-            .ok_or(OtaError::OtaNotStarted)?;
+        let progress = self.progress.clone().ok_or(OtaError::OtaNotStarted)?;
 
-        self.set_ota_state((progress.target_partition + 1) as u8, OtaImgState::EspOtaImgAborted)?;
+        self.set_ota_state(
+            (progress.target_partition + 1) as u8,
+            OtaImgState::EspOtaImgAborted,
+        )?;
         self.progress = None;
         log_info!("[OTA] OTA aborted");
         Ok(())
-
     }
-
 
     /// Returns ota progress in f32 (0..1)
     #[allow(dead_code)]
@@ -109,10 +107,7 @@ where
 
     /// Writes next firmware chunk
     pub fn ota_write_chunk(&mut self, chunk: &[u8], length: usize) -> Result<bool> {
-        let progress = self
-            .progress
-            .as_mut()
-            .ok_or(OtaError::OtaNotStarted)?;
+        let progress = self.progress.as_mut().ok_or(OtaError::OtaNotStarted)?;
 
         if progress.remaining == 0 {
             return Ok(true);
@@ -146,13 +141,9 @@ where
             return Err(OtaError::OtaVerifyError);
         }
 
-        let progress = self
-            .progress
-            .clone()
-            .ok_or(OtaError::OtaNotStarted)?;
+        let progress = self.progress.clone().ok_or(OtaError::OtaNotStarted)?;
 
         if progress.target_hash != progress.last_hash.clone().finalize().as_slice() {
- 
             log_warn!("[OTA] Calculated hash: {:?}", progress.last_hash);
             log_warn!("[OTA] Target hash: {:?}", progress.target_hash);
             log_error!("[OTA] Crc check failed! Cant finish ota update...");
@@ -166,10 +157,7 @@ where
 
     /// rollback - if rollbacks enable (will set ota_state to ESP_OTA_IMG_NEW)
     pub fn ota_set_pending_image(&mut self, rollback: bool) -> Result<()> {
-        let progress = self
-            .progress
-            .clone()
-            .ok_or(OtaError::OtaNotStarted)?;
+        let progress = self.progress.clone().ok_or(OtaError::OtaNotStarted)?;
 
         let img_state = match rollback {
             true => OtaImgState::EspOtaImgNew,
@@ -179,18 +167,17 @@ where
         // Then set it as the boot partition
         self.set_target_ota_boot_partition(progress.target_partition, img_state);
 
-        log_info!("[OTA] OTA set pending image, target partition: {}, img_state: {:?}", 
-            progress.target_partition, 
-            img_state);
+        log_info!(
+            "[OTA] OTA set pending image, target partition: {}, img_state: {:?}",
+            progress.target_partition,
+            img_state
+        );
         Ok(())
     }
 
     /// It reads written flash and checks crc
     pub fn ota_verify(&mut self) -> Result<bool> {
-        let progress = self
-            .progress
-            .clone()
-            .ok_or(OtaError::OtaNotStarted)?;
+        let progress = self.progress.clone().ok_or(OtaError::OtaNotStarted)?;
 
         let mut hasher = Sha256::new();
         let mut bytes = [0; OTA_VERIFY_READ_SIZE];
@@ -199,7 +186,10 @@ where
         let mut remaining = progress.flash_size;
 
         // Add debug logging
-        log_debug!("[OTA] Starting verification from offset: {}", format_args!("0x{:x}", partition_offset));
+        log_debug!(
+            "[OTA] Starting verification from offset: {}",
+            format_args!("0x{:x}", partition_offset)
+        );
         log_debug!("[OTA] Total size to verify: {}", remaining);
         log_debug!("[OTA] Target partition: {}", progress.target_partition);
 
@@ -207,7 +197,7 @@ where
         while remaining > 0 {
             let n = remaining.min(OTA_VERIFY_READ_SIZE as u32);
             _ = self.flash.read(partition_offset, &mut bytes[..n as usize]);
-         
+
             partition_offset += n;
             remaining -= n;
             hasher.update(&bytes[..n as usize]);
@@ -215,10 +205,12 @@ where
 
         let computed_hash = hasher.finalize();
 
-        log_warn!("[OTA] Write hash: {:?}", progress.last_hash.finalize().as_slice());
+        log_warn!(
+            "[OTA] Write hash: {:?}",
+            progress.last_hash.finalize().as_slice()
+        );
         log_warn!("[OTA] Read hash: {:?}", computed_hash.as_slice());
         log_warn!("[OTA] Target hash: {:?}", progress.target_hash);
-
 
         Ok(computed_hash[..] == progress.target_hash[..])
     }
@@ -238,13 +230,13 @@ where
         let mut entry1 = [0u8; 32];
         let mut entry2 = [0u8; 32];
         let target_crc = crc32::calc_crc32(&target_seq.to_le_bytes(), 0xFFFFFFFF);
-    
+
         if target_seq == 2 {
             log_info!("[OTA] Setting target ota boot partition to ota_1");
             // First slot: seq=2 (higher than current)
             entry1[0..4].copy_from_slice(&target_seq.to_le_bytes());
             entry1[4..24].fill(0xFF);
-            entry1[24..28].copy_from_slice(&(state as u32).to_le_bytes());            
+            entry1[24..28].copy_from_slice(&(state as u32).to_le_bytes());
             entry1[28..32].copy_from_slice(&target_crc.to_le_bytes());
 
             // Second slot: seq=1 (for current ota_0)
@@ -253,7 +245,6 @@ where
             entry2[24..28].copy_from_slice(&(OtaImgState::EspOtaImgValid as u32).to_le_bytes());
             let crc2 = crc32::calc_crc32(&(target_seq - 1).to_le_bytes(), 0xFFFFFFFF);
             entry2[28..32].copy_from_slice(&crc2.to_le_bytes());
-
         } else {
             log_info!("[OTA] Setting target ota boot partition to ota_0");
             // For ota_0, use lower sequence
@@ -262,36 +253,63 @@ where
             entry1[24..28].copy_from_slice(&(state as u32).to_le_bytes());
             entry1[28..32].copy_from_slice(&target_crc.to_le_bytes());
 
-            entry2.fill(0xFF);  // Second slot invalid
+            entry2.fill(0xFF); // Second slot invalid
         }
 
-        let flash = &mut self.flash;     
+        let flash = &mut self.flash;
 
         // Write entries
         _ = flash.write(self.pinfo.otadata_offset, &entry1);
-        _ = flash.write(self.pinfo.otadata_offset + (self.pinfo.otadata_size >> 1), &entry2);
+        _ = flash.write(
+            self.pinfo.otadata_offset + (self.pinfo.otadata_size >> 1),
+            &entry2,
+        );
 
-        log_debug!("[OTA] Writing boot entries for target partition: {}, offset1: {}, offset2: {}", 
+        log_debug!(
+            "[OTA] Writing boot entries for target partition: {}, offset1: {}, offset2: {}",
             target,
             format_args!("0x{:x}", self.pinfo.otadata_offset),
-            format_args!("0x{:x}", self.pinfo.otadata_offset + (self.pinfo.otadata_size >> 1)));
+            format_args!(
+                "0x{:x}",
+                self.pinfo.otadata_offset + (self.pinfo.otadata_size >> 1)
+            )
+        );
 
         // Verify the writes
         let mut verify_buf = [0u8; 32];
-        
+
         // Verify slot 1
         _ = flash.read(self.pinfo.otadata_offset, &mut verify_buf);
-        log_debug!("[OTA] Slot 1 verification, seq: {}, state: {}, crc: {}", 
+        log_debug!(
+            "[OTA] Slot 1 verification, seq: {}, state: {}, crc: {}",
             u32::from_le_bytes(verify_buf[0..4].try_into().unwrap()),
-            format_args!("0x{:x}", u32::from_le_bytes(verify_buf[24..28].try_into().unwrap())),
-            format_args!("0x{:x}", u32::from_le_bytes(verify_buf[28..32].try_into().unwrap())));
+            format_args!(
+                "0x{:x}",
+                u32::from_le_bytes(verify_buf[24..28].try_into().unwrap())
+            ),
+            format_args!(
+                "0x{:x}",
+                u32::from_le_bytes(verify_buf[28..32].try_into().unwrap())
+            )
+        );
 
         // Verify slot 2
-        _ = flash.read(self.pinfo.otadata_offset + (self.pinfo.otadata_size >> 1), &mut verify_buf);
-        log_debug!("[OTA] Slot 2 verification, seq: {}, state: {}, crc: {}", 
+        _ = flash.read(
+            self.pinfo.otadata_offset + (self.pinfo.otadata_size >> 1),
+            &mut verify_buf,
+        );
+        log_debug!(
+            "[OTA] Slot 2 verification, seq: {}, state: {}, crc: {}",
             u32::from_le_bytes(verify_buf[0..4].try_into().unwrap()),
-            format_args!("0x{:x}", u32::from_le_bytes(verify_buf[24..28].try_into().unwrap())),
-            format_args!("0x{:x}", u32::from_le_bytes(verify_buf[28..32].try_into().unwrap())));
+            format_args!(
+                "0x{:x}",
+                u32::from_le_bytes(verify_buf[24..28].try_into().unwrap())
+            ),
+            format_args!(
+                "0x{:x}",
+                u32::from_le_bytes(verify_buf[28..32].try_into().unwrap())
+            )
+        );
     }
 
     pub fn set_ota_state(&mut self, slot: u8, state: OtaImgState) -> Result<()> {
@@ -302,7 +320,6 @@ where
                 log_error!("Use slot1 or slot2!");
                 return Err(OtaError::CannotFindCurrentBootPartition);
             }
-
         };
 
         _ = self
@@ -385,7 +402,11 @@ where
         if current_slot.ota_state != OtaImgState::EspOtaImgValid {
             self.set_ota_state(current_slot_nmb, OtaImgState::EspOtaImgValid)?;
 
-            log_info!("Marked current slot as valid!, current_slot_nmb: {}, current_slot: {:?}", current_slot_nmb, current_slot);
+            log_info!(
+                "Marked current slot as valid!, current_slot_nmb: {}, current_slot: {:?}",
+                current_slot_nmb,
+                current_slot
+            );
         }
 
         Ok(())
@@ -398,7 +419,6 @@ where
             self.set_ota_state(current_slot_nmb, OtaImgState::EspOtaImgInvalid)?;
 
             log_info!("Marked current slot as invalid!");
-
         }
 
         Ok(())

@@ -4,7 +4,6 @@ use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
-use core::result::Result;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
@@ -367,4 +366,11 @@ pub async fn mender_scheduler_work_delete(
 pub async fn mender_scheduler_work_delete_all() -> Result<(), &'static str> {
     log_info!("mender_scheduler_work_delete_all");
     SCHEDULER.delete_all_works().await
+}
+
+// Add Default implementation
+impl Default for Scheduler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
