@@ -24,14 +24,14 @@ pub struct FlashProgress {
     pub flash_size: u32,
     pub remaining: u32,
 
-    pub target_partition: usize,
+    pub target_partition: u32,
     pub target_hash: [u8; 32],
 }
 
 #[derive(Debug)]
 pub struct PartitionInfo {
     pub ota_partitions: [(u32, u32); 16],
-    pub ota_partitions_count: usize,
+    pub ota_partitions_count: u32,
 
     pub otadata_offset: u32,
     pub otadata_size: u32,

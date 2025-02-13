@@ -19,7 +19,7 @@ use embassy_net::Stack;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use esp_hal::rng::Trng;
-use heapless::{String as HString, Vec as HVec};
+use heapless::String as HString;
 use serde::{Deserialize, Serialize};
 use serde_json_core::de::from_str;
 
@@ -29,13 +29,14 @@ use crate::mender_mcu_client::platform::scheduler::mender_scheduler;
 use crate::mender_mcu_client::platform::storage::mender_storage;
 use crate::mender_mcu_client::platform::tls::mender_tls;
 
+use crate::custom::mender_common::{serde_bytes_str, serde_bytes_str_vec};
+use crate::custom::mender_config::{
+    CONFIG_MENDER_AUTH_POLL_INTERVAL, CONFIG_MENDER_UPDATE_POLL_INTERVAL,
+};
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::vec::Vec;
 use core::future::Future;
-
-pub const CONFIG_MENDER_AUTH_POLL_INTERVAL: u32 = 60; // default 600;
-pub const CONFIG_MENDER_UPDATE_POLL_INTERVAL: u32 = 1800; // default 1800;
 
 #[derive(Debug, Clone)]
 pub struct MenderClientConfig {
@@ -47,6 +48,7 @@ pub struct MenderClientConfig {
     pub authentication_poll_interval: u32,
     pub update_poll_interval: u32,
     pub recommissioning: bool,
+    pub device_update_done_reset: bool,
 }
 
 impl MenderClientConfig {
@@ -66,22 +68,20 @@ impl MenderClientConfig {
             authentication_poll_interval: 0,
             update_poll_interval: 0,
             recommissioning: false,
+            device_update_done_reset: false,
         }
     }
 
-    #[allow(dead_code)]
     pub fn with_host(mut self, host: &str) -> Self {
         self.host = host.to_string();
         self
     }
 
-    #[allow(dead_code)]
     pub fn with_auth_interval(mut self, interval: u32) -> Self {
         self.authentication_poll_interval = interval;
         self
     }
 
-    #[allow(dead_code)]
     pub fn with_update_interval(mut self, interval: u32) -> Self {
         self.update_poll_interval = interval;
         self
@@ -89,6 +89,11 @@ impl MenderClientConfig {
 
     pub fn with_recommissioning(mut self, recommissioning: bool) -> Self {
         self.recommissioning = recommissioning;
+        self
+    }
+
+    pub fn with_device_update_done_reset(mut self, device_update_done_reset: bool) -> Self {
+        self.device_update_done_reset = device_update_done_reset;
         self
     }
 }
@@ -150,18 +155,17 @@ static MENDER_CLIENT_WORK: Mutex<CriticalSectionRawMutex, Option<MenderScheduler
 static MENDER_CLIENT_ADDONS: Mutex<CriticalSectionRawMutex, Vec<&'static dyn MenderAddon>> =
     Mutex::new(Vec::new());
 
-// Constants and type definitions
-#[allow(dead_code)]
-const MAX_JSON_STRING_SIZE: usize = 128;
-const MAX_JSON_ARRAY_SIZE: usize = 32;
-
 // Define JSON-compatible data structure
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct DeploymentData {
-    id: HString<50>,            // "026ffb94-e30a-4f1e-9155-71cb1a093532"
-    artifact_name: HString<50>, // "mender-artifact-026ffb94-e30a-4f1e-9155-71cb1a093532"
-    types: HVec<HString<50>, MAX_JSON_ARRAY_SIZE>, // ["rootfs-image"]
+    #[serde(with = "serde_bytes_str")]
+    id: String, // "026ffb94-e30a-4f1e-9155-71cb1a093532"
+    #[serde(with = "serde_bytes_str")]
+    artifact_name: String, // "mender-artifact-026ffb94-e30a-4f1e-9155-71cb1a093532"
+    #[serde(with = "serde_bytes_str_vec")]
+    types: Vec<String>, // ["rootfs-image"]
 }
+
 // Static storage
 static MENDER_CLIENT_DEPLOYMENT_DATA: Mutex<CriticalSectionRawMutex, Option<DeploymentData>> =
     Mutex::new(None);
@@ -185,15 +189,15 @@ static MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART: Mutex<CriticalSectionRawMutex, bo
 
 #[derive(Clone)]
 pub struct ArtifactTypeHandler {
-    pub type_name: HString<32>,
+    pub type_name: String,
     pub callback: &'static dyn MenderArtifactCallback,
     pub needs_restart: bool,
-    pub artifact_name: HString<32>,
+    pub artifact_name: String,
 }
 
 static MENDER_CLIENT_ARTIFACT_TYPES: Mutex<
     CriticalSectionRawMutex,
-    Option<HVec<ArtifactTypeHandler, MAX_JSON_ARRAY_SIZE>>,
+    Option<Vec<ArtifactTypeHandler>>,
 > = Mutex::new(None);
 
 pub struct CryptoRng<'a>(Trng<'a>);
@@ -218,10 +222,10 @@ impl MenderArtifactCallback for FlashCallback {
         // type_name: &'a str,
         // meta_data: &'a str,
         filename: &'a str,
-        size: usize,
+        size: u32,
         data: &'a [u8],
-        index: usize,
-        length: usize,
+        index: u32,
+        length: u32,
         chksum: &'a [u8],
     ) -> Pin<Box<dyn Future<Output = MenderResult<()>> + Send + 'a>> {
         Box::pin(async move {
@@ -323,7 +327,7 @@ pub async fn mender_client_init(
     if mender_client_register_artifact_type(
         "rootfs-image",
         &FLASH_CALLBACK,
-        true,
+        saved_config.device_update_done_reset,
         &saved_config.artifact_name,
     )
     .await
@@ -383,16 +387,10 @@ pub async fn mender_client_register_artifact_type(
 
     // Create new artifact type handler
     let artifact_type = ArtifactTypeHandler {
-        type_name: HString::<32>::try_from(type_name).map_err(|_| {
-            log_error!("Type name too long");
-            MenderStatus::Failed
-        })?,
+        type_name: type_name.to_string(),
         callback,
         needs_restart,
-        artifact_name: HString::<32>::try_from(artifact_name).map_err(|_| {
-            log_error!("Artifact name too long");
-            MenderStatus::Failed
-        })?,
+        artifact_name: artifact_name.to_string(),
     };
 
     // Take mutex to protect access to the artifact types list
@@ -400,15 +398,12 @@ pub async fn mender_client_register_artifact_type(
 
     // Initialize the vector if it doesn't exist
     if artifact_types.is_none() {
-        *artifact_types = Some(HVec::new());
+        *artifact_types = Some(Vec::new());
     }
 
     // Add the new artifact type to the list
     if let Some(types) = artifact_types.as_mut() {
-        if types.push(artifact_type).is_err() {
-            log_error!("Unable to add artifact type: list is full");
-            return Err(MenderStatus::Failed);
-        }
+        types.push(artifact_type);
     }
 
     Ok((MenderStatus::Ok, ()))
@@ -785,21 +780,9 @@ async fn mender_client_update_work_function() -> MenderStatus {
 
     // Create deployment data structure
     let deployment_data = DeploymentData {
-        id: match HString::try_from(id.as_str()) {
-            Ok(s) => s,
-            Err(_) => {
-                log_error!("Failed to create deployment id string");
-                return MenderStatus::Failed;
-            }
-        },
-        artifact_name: match HString::try_from(artifact_name.as_str()) {
-            Ok(s) => s,
-            Err(_) => {
-                log_error!("Failed to create artifact name string");
-                return MenderStatus::Failed;
-            }
-        },
-        types: HVec::new(), // Initialize with empty array
+        id: id.to_string(),
+        artifact_name: artifact_name.to_string(),
+        types: Vec::new(), // Initialize with empty vector
     };
 
     {
@@ -862,14 +845,18 @@ async fn mender_client_update_work_function() -> MenderStatus {
     let needs_restart = MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART.lock().await;
     if *needs_restart {
         // Save deployment data
-        let deployment_str: heapless::String<256> = {
+        let deployment_str: HString<256> = {
             let deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
             if let Some(deployment) = deployment.as_ref() {
                 match serde_json_core::to_string(&deployment) {
                     Ok(str) => str,
-                    Err(_) => return MenderStatus::Failed,
+                    Err(_) => {
+                        log_error!("Failed to serialize deployment data");
+                        return MenderStatus::Failed;
+                    }
                 }
             } else {
+                log_error!("No deployment data available");
                 return MenderStatus::Failed;
             }
         };
@@ -942,10 +929,10 @@ async fn mender_client_download_artifact_callback(
     artifact_type: Option<&str>,
     meta_data: Option<&str>,
     filename: Option<&str>,
-    size: usize,
+    size: u32,
     data: &[u8],
-    index: usize,
-    length: usize,
+    index: u32,
+    length: u32,
     chksum: &[u8],
 ) -> MenderResult<()> {
     log_debug!(
@@ -989,10 +976,10 @@ async fn mender_client_download_artifact_callback(
                             artifact_type_str
                         );
 
-                        // First, prepare the type_str outside the lock
-                        let type_str = HString::<50>::try_from(artifact_type_str).unwrap();
+                        // Convert the type string
+                        let type_str = artifact_type_str.to_string();
 
-                        // Then check if we need to add the type and add it in a smaller scope
+                        // Check if we need to add the type and add it in a smaller scope
                         {
                             let mut deployment_data = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
                             let deployment = deployment_data.as_mut().unwrap();
@@ -1004,13 +991,7 @@ async fn mender_client_download_artifact_callback(
                                     "Adding artifact type {} to the deployment data",
                                     artifact_type_str
                                 );
-                                if deployment.types.push(type_str).is_err() {
-                                    log_error!(
-                                        "Unable to add artifact type: {}",
-                                        artifact_type_str
-                                    );
-                                    return Err(MenderStatus::Failed);
-                                }
+                                deployment.types.push(type_str);
                             }
                         }
 
@@ -1139,10 +1120,10 @@ async fn mender_client_download_artifact_flash_callback(
     // _type_name: &str,
     // _meta_data: &str,
     filename: &str,
-    size: usize,
+    size: u32,
     data: &[u8],
-    index: usize,
-    length: usize,
+    index: u32,
+    length: u32,
     chksum: &[u8],
 ) -> MenderResult<()> {
     log_info!("mender_client_download_artifact_flash_callback, filename: {}, size: {}, index: {}, length: {}", filename, size, index, length);

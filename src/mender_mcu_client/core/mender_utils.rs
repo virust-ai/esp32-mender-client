@@ -2,13 +2,11 @@ extern crate alloc;
 
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
+use alloc::format;
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::fmt;
-use core::fmt::Write;
-use heapless::{FnvIndexMap, String as HeaplessString};
-use heapless::{String as HString, Vec as HVec};
 use serde::{Deserialize, Serialize};
-use serde_json_core::ser;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MenderStatus {
@@ -54,17 +52,93 @@ impl fmt::Display for DeploymentStatus {
     }
 }
 
-const MAX_STRING_SIZE: usize = 32;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct KeyStoreItem {
-    pub name: HString<MAX_STRING_SIZE>,
-    pub value: HString<MAX_STRING_SIZE>,
+    pub name: String,
+    pub value: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Add serialization implementation manually
+impl Serialize for KeyStoreItem {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("KeyStoreItem", 2)?;
+        state.serialize_field("name", &self.name.as_str())?;
+        state.serialize_field("value", &self.value.as_str())?;
+        state.end()
+    }
+}
+
+// Add deserialization implementation manually
+impl<'de> Deserialize<'de> for KeyStoreItem {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Helper<'a> {
+            name: &'a str,
+            value: &'a str,
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+        Ok(KeyStoreItem {
+            name: helper.name.to_string(),
+            value: helper.value.to_string(),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct KeyStore {
-    pub items: HVec<KeyStoreItem, MAX_STRING_SIZE>,
+    pub items: Vec<KeyStoreItem>,
+}
+
+impl Serialize for KeyStore {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeSeq;
+        let mut seq = serializer.serialize_seq(Some(self.items.len()))?;
+        for item in &self.items {
+            seq.serialize_element(item)?;
+        }
+        seq.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for KeyStore {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct KeyStoreVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for KeyStoreVisitor {
+            type Value = KeyStore;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a sequence of KeyStoreItems")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut items = Vec::new();
+                while let Some(item) = seq.next_element()? {
+                    items.push(item);
+                }
+                Ok(KeyStore { items })
+            }
+        }
+
+        deserializer.deserialize_seq(KeyStoreVisitor)
+    }
 }
 
 impl Default for KeyStore {
@@ -75,167 +149,52 @@ impl Default for KeyStore {
 
 impl KeyStore {
     pub fn new() -> Self {
-        KeyStore { items: HVec::new() }
-    }
-
-    #[allow(dead_code)]
-    pub fn with_capacity(_capacity: usize) -> Self {
-        KeyStore {
-            items: HVec::<KeyStoreItem, MAX_STRING_SIZE>::new(),
-        }
+        KeyStore { items: Vec::new() }
     }
 
     pub fn set_item(&mut self, name: &str, value: &str) -> MenderResult<()> {
         if let Some(item) = self.items.iter_mut().find(|item| item.name == name) {
-            let mut hvalue = HString::<MAX_STRING_SIZE>::new();
-            hvalue.push_str(value).map_err(|_| MenderStatus::Failed)?;
-            item.value = hvalue;
+            item.value = value.to_string();
         } else {
-            let mut hname = HString::<MAX_STRING_SIZE>::new();
-            let mut hvalue = HString::<MAX_STRING_SIZE>::new();
-
-            hname.push_str(name).map_err(|_| MenderStatus::Failed)?;
-            hvalue.push_str(value).map_err(|_| MenderStatus::Failed)?;
-
-            self.items
-                .push(KeyStoreItem {
-                    name: hname,
-                    value: hvalue,
-                })
-                .map_err(|_| MenderStatus::Failed)?;
+            self.items.push(KeyStoreItem {
+                name: name.to_string(),
+                value: value.to_string(),
+            });
         }
         Ok((MenderStatus::Ok, ()))
-    }
-
-    #[allow(dead_code)]
-    pub fn get_item(&self, name: &str) -> Option<&str> {
-        self.items
-            .iter()
-            .find(|item| item.name == name)
-            .map(|item| item.value.as_str())
-    }
-
-    #[allow(dead_code)]
-    pub fn len(&self) -> usize {
-        self.items.len()
     }
 
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
-
-    #[allow(dead_code)]
-    pub fn clear(&mut self) -> MenderResult<()> {
-        self.items.clear();
-        Ok((MenderStatus::Ok, ()))
-    }
-
-    #[allow(dead_code)]
-    pub fn copy_from(&mut self, src: &KeyStore) -> MenderResult<()> {
-        // Ensure there is enough capacity for both existing and new items
-        if self.items.len() + src.len() > self.items.capacity() {
-            log_error!("Not enough capacity to copy items");
-            return Err(MenderStatus::Failed);
-        }
-
-        // Copy all items from source
-        for item in &src.items {
-            self.items
-                .push(KeyStoreItem {
-                    name: item.name.clone(),
-                    value: item.value.clone(),
-                })
-                .map_err(|_| MenderStatus::Failed)?;
-        }
-
-        Ok((MenderStatus::Ok, ()))
-    }
-
-    #[allow(dead_code)]
-    pub fn create_copy(src: &KeyStore) -> MenderResult<Self> {
-        let mut new_store = KeyStore::with_capacity(src.len());
-        new_store.copy_from(src)?;
-        Ok((MenderStatus::Ok, new_store))
-    }
-
-    /// Deserialize a KeyStore from a JSON object
-    #[allow(dead_code)]
-    pub fn from_json(json: &FnvIndexMap<&str, &str, 16>) -> MenderResult<Self> {
-        let mut keystore = KeyStore::with_capacity(json.len());
-
-        for (key, value) in json.iter() {
-            keystore.set_item(key, value)?;
-        }
-
-        Ok((MenderStatus::Ok, keystore))
-    }
-
-    /// Updates an existing KeyStore with data from a JSON object
-    #[allow(dead_code)]
-    pub fn update_from_json(&mut self, json: &FnvIndexMap<&str, &str, 16>) -> MenderResult<()> {
-        for (key, value) in json.iter() {
-            self.set_item(key, value)?;
-        }
-        Ok((MenderStatus::Ok, ()))
-    }
-
-    #[allow(dead_code)]
-    pub fn to_json(&self) -> MenderResult<String> {
-        // Create a fixed-capacity map for JSON serialization
-        let mut json_map: FnvIndexMap<&str, &str, 16> = FnvIndexMap::new();
-
-        // Populate the map with items from the KeyStore
-        for item in &self.items {
-            let key = item.name.as_str();
-            let value = item.value.as_str();
-
-            // Insert into the map, checking for capacity issues
-            json_map
-                .insert(key, value)
-                .map_err(|_| MenderStatus::Failed)?;
-        }
-
-        // Serialize the map into a heapless::String
-        let mut json_string = HeaplessString::<256>::new();
-        write!(
-            json_string,
-            "{}",
-            ser::to_string::<_, 256>(&json_map).map_err(|_| MenderStatus::Failed)?
-        )
-        .map_err(|_| MenderStatus::Failed)?;
-
-        // Convert heapless::String to alloc::String
-        Ok((MenderStatus::Ok, json_string.to_string()))
-    }
 }
 
 pub fn mender_utils_keystore_to_json(keystore: &KeyStore) -> MenderResult<String> {
     log_debug!("mender_utils_keystore_to_json");
-    // Create a fixed-capacity map for JSON serialization
-    let mut json_map: FnvIndexMap<&str, &str, 16> = FnvIndexMap::new();
 
-    // Populate the map with items from the KeyStore
-    for item in &keystore.items {
-        let key = item.name.as_str();
-        let value = item.value.as_str();
-
-        // Insert into the map, checking for capacity issues
-        json_map
-            .insert(key, value)
-            .map_err(|_| MenderStatus::Failed)?;
+    // For a single key-value pair, format directly
+    if keystore.items.len() == 1 {
+        let item = &keystore.items[0];
+        // Format with proper JSON syntax (using colon between key and value)
+        let json = format!(r#"{{"{}":"{}"}}"#, item.name, item.value);
+        return Ok((MenderStatus::Ok, json));
     }
 
-    // Serialize the map into a heapless::String
-    let mut json_string = HeaplessString::<256>::new();
-    write!(
-        json_string,
-        "{}",
-        ser::to_string::<_, 256>(&json_map).map_err(|_| MenderStatus::Failed)?
-    )
-    .map_err(|_| MenderStatus::Failed)?;
+    // For multiple items (though not expected in this case)
+    let mut json = String::new();
+    json.push('{');
 
-    // Convert heapless::String to alloc::String
-    Ok((MenderStatus::Ok, json_string.to_string()))
+    for (i, item) in keystore.items.iter().enumerate() {
+        if i > 0 {
+            json.push(',');
+        }
+        // Format each key-value pair with proper JSON syntax
+        json.push_str(&format!(r#""{}":"{}""#, item.name, item.value));
+    }
+
+    json.push('}');
+
+    Ok((MenderStatus::Ok, json))
 }
 
 pub fn mender_utils_http_status_to_string(status: i32) -> Option<&'static str> {
@@ -323,33 +282,3 @@ pub fn mender_utils_strrstr<'a>(haystack: &'a str, needle: &str) -> Option<&'a s
     // Return slice from the last found position if any
     last_pos.map(|pos| &haystack[pos..])
 }
-
-// pub fn mender_utils_str_begins_with(s1: &str, s2: &str) -> bool {
-//     s1.starts_with(s2)
-// }
-
-// pub fn mender_utils_str_ends_with(s1: &str, s2: &str) -> bool {
-//     s1.ends_with(s2)
-// }
-
-// pub fn mender_utils_str_last_occurrence(haystack: &str, needle: &str) -> Option<usize> {
-//     haystack.rfind(needle)
-// }
-
-// pub fn mender_utils_keystore_copy_from(dest: &mut KeyStore, src: &KeyStore) -> MenderResult<()> {
-//     // Ensure there is enough capacity for both existing and new items
-//     if dest.items.len() + src.len() > dest.items.capacity() {
-//         log_error!("Not enough capacity to copy items");
-//         return Err(MenderStatus::Failed);
-//     }
-
-//     // Copy all items from source
-//     for item in &src.items {
-//         dest.items.push(KeyStoreItem {
-//             name: item.name.clone(),
-//             value: item.value.clone(),
-//         }).map_err(|_| MenderStatus::Failed)?;
-//     }
-
-//     Ok(())
-// }

@@ -1,4 +1,3 @@
-//use alloc::string::String;
 use crate::{
     custom::mender_common::{MenderCallback, MenderCallbackInfo},
     mender_mcu_client::core::mender_utils::{self, MenderResult, MenderStatus},
@@ -6,12 +5,12 @@ use crate::{
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
 
+use crate::custom::mender_common::{serde_bytes_str, serde_bytes_str_vec};
 use alloc::format;
-use alloc::string::ToString;
-use heapless::{String as HString, Vec as HVec};
-use serde::Deserialize;
-
-const MAX_STRING_PAYLOADS: usize = 40;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use heapless::Vec as HVec;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy)]
 pub enum MenderArtifactStreamState {
@@ -19,28 +18,20 @@ pub enum MenderArtifactStreamState {
     ParsingData,   // Currently parsing data
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MenderArtifactPayload {
-    #[serde(rename = "type")]
-    pub payload_type: HString<MAX_STRING_PAYLOADS>, // Type of the payload
-    pub checksum: HString<64>, // Make sure this is 64 to match RootfsImageProvides
-    pub meta_data: Option<JsonResponse>, // Meta-data from header tarball
+    #[serde(rename(serialize = "type", deserialize = "type"))]
+    #[serde(with = "serde_bytes_str")]
+    pub payload_type: String,
+    #[serde(with = "serde_bytes_str")]
+    pub checksum: String,
+    pub meta_data: Option<JsonResponse>,
 }
 
-// Reuse the JsonResponse from mender_api.rs
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonResponse {
-    pub error: Option<HString<100>>,
-    // Add other fields that might be in the meta_data
-}
-
-impl JsonResponse {
-    pub fn as_str(&self) -> &str {
-        match &self.error {
-            Some(err) => err.as_str(),
-            None => "",
-        }
-    }
+    #[serde(with = "serde_bytes_str")]
+    pub error: String,
 }
 
 pub struct MenderArtifactContext {
@@ -51,22 +42,22 @@ pub struct MenderArtifactContext {
 }
 
 pub struct MenderArtifactInput {
-    pub data: HVec<u8, 26384>, // Data received chunk by chunk
-    pub length: usize,         // Length of data received
+    pub data: Vec<u8>, // Data received chunk by chunk
+    pub length: u32,   // Length of data received
 }
 
 pub struct MenderArtifactPayloads {
-    pub size: usize,                             // Number of payloads
-    pub values: HVec<MenderArtifactPayload, 16>, // Values of payloads
+    pub size: u32,                          // Number of payloads
+    pub values: Vec<MenderArtifactPayload>, // Values of payloads
 }
 
 pub struct MenderArtifactFile {
-    pub name: HString<100>, // Name of file being parsed
-    pub size: usize,        // Size of file in bytes
-    pub index: usize,       // Current position in file
+    pub name: String, // Name of file being parsed
+    pub size: u32,    // Size of file in bytes
+    pub index: u32,   // Current position in file
 }
 
-const MENDER_ARTIFACT_STREAM_BLOCK_SIZE: usize = 512;
+const MENDER_ARTIFACT_STREAM_BLOCK_SIZE: u32 = 512;
 const MENDER_ARTIFACT_VERSION_FORMAT: &str = "mender"; // Adjust value as needed
 const MENDER_ARTIFACT_VERSION_VALUE: i32 = 3; // Adjust value as needed
 
@@ -90,13 +81,13 @@ struct TarHeader {
     prefix: [u8; 155],
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct VersionInfo<'a> {
     format: &'a str,
     version: i64,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeaderInfo {
     pub payloads: HVec<PayloadInfo, 1>, // We only expect one payload
     #[allow(dead_code)]
@@ -105,42 +96,49 @@ pub struct HeaderInfo {
     pub artifact_depends: ArtifactDepends,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PayloadInfo {
-    #[serde(rename = "type")]
-    pub payload_type: HString<MAX_STRING_PAYLOADS>, // Using MAX_STRING_PAYLOADS constant
+    #[serde(rename(serialize = "type", deserialize = "type"))]
+    #[serde(with = "serde_bytes_str")]
+    pub payload_type: String,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactProvides {
     #[allow(dead_code)]
-    pub artifact_name: HString<MAX_STRING_PAYLOADS>,
+    #[serde(with = "serde_bytes_str")]
+    pub artifact_name: String,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactDepends {
     #[allow(dead_code)]
-    pub device_type: HVec<HString<MAX_STRING_PAYLOADS>, 1>, // Array with single device type
+    #[serde(with = "serde_bytes_str_vec")]
+    pub device_type: Vec<String>,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
-    #[serde(rename = "type")]
-    pub type_name: HString<MAX_STRING_PAYLOADS>,
+    #[serde(rename(serialize = "type", deserialize = "type"))]
+    #[serde(with = "serde_bytes_str")]
+    pub type_name: String,
     pub artifact_provides: RootfsImageProvides,
     #[allow(dead_code)]
-    pub clears_artifact_provides: HVec<HString<MAX_STRING_PAYLOADS>, 4>,
+    #[serde(with = "serde_bytes_str_vec")]
+    pub clears_artifact_provides: Vec<String>,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RootfsImageProvides {
     #[serde(rename = "rootfs-image.checksum")]
     #[serde(alias = "module-image.checksum")]
-    pub checksum: HString<64>, // For SHA-256 hash
+    #[serde(with = "serde_bytes_str")]
+    pub checksum: String, // For SHA-256 hash
 
     #[serde(rename = "rootfs-image.version")]
     #[serde(alias = "module-image.version")]
-    pub version: HString<MAX_STRING_PAYLOADS>,
+    #[serde(with = "serde_bytes_str")]
+    pub version: String,
 }
 
 impl Default for MenderArtifactContext {
@@ -154,15 +152,15 @@ impl MenderArtifactContext {
         Self {
             stream_state: MenderArtifactStreamState::ParsingHeader,
             input: MenderArtifactInput {
-                data: HVec::new(),
+                data: Vec::new(),
                 length: 0,
             },
             payloads: MenderArtifactPayloads {
                 size: 0,
-                values: HVec::new(),
+                values: Vec::new(),
             },
             file: MenderArtifactFile {
-                name: HString::new(),
+                name: String::new(),
                 size: 0,
                 index: 0,
             },
@@ -180,16 +178,8 @@ pub async fn mender_artifact_process_data(
     // Copy data to the end of the internal buffer
     if let Some(data) = input_data {
         if input_length > 0 {
-            if ctx
-                .input
-                .data
-                .extend_from_slice(&data[..input_length])
-                .is_err()
-            {
-                log_error!("Failed to extend input data buffer");
-                return Err(MenderStatus::Failed);
-            }
-            ctx.input.length += input_length;
+            ctx.input.data.extend_from_slice(&data[..input_length]);
+            ctx.input.length += input_length as u32;
             log_debug!("current input length: {}", ctx.input.length);
         }
     }
@@ -381,20 +371,14 @@ pub async fn mender_artifact_parse_tar_header(ctx: &mut MenderArtifactContext) -
     };
 
     // Update ctx.file.name with the new name
-    ctx.file.name = new_name.as_str().try_into().map_err(|_| {
-        log_error!("Unable to allocate memory");
-        MenderStatus::Failed
-    })?;
+    ctx.file.name = new_name.as_str().into();
 
     // Retrieve file size (parse octal string)
-    //log_info!("tar header size", "size" => tar_header.size);
     let size_str = core::str::from_utf8(&tar_header.size)
         .map_err(|_| MenderStatus::Failed)?
         .trim_matches('\0');
-    //log_info!("size str octal", "size_str" => size_str);
-    //log_info!("size str len", "len" => size_str.len());
 
-    ctx.file.size = usize::from_str_radix(size_str, 8).map_err(|_| MenderStatus::Failed)?;
+    ctx.file.size = u32::from_str_radix(size_str, 8).map_err(|_| MenderStatus::Failed)?;
     ctx.file.index = 0;
 
     log_debug!("file name: {}", ctx.file.name.as_str());
@@ -422,7 +406,7 @@ pub async fn mender_artifact_check_version(ctx: &mut MenderArtifactContext) -> M
 
     // Parse version file
     let (version_info, _): (VersionInfo, _) =
-        serde_json_core::from_slice(&ctx.input.data[..ctx.file.size]).map_err(|_| {
+        serde_json_core::from_slice(&ctx.input.data[..ctx.file.size as usize]).map_err(|_| {
             log_error!("Unable to parse version file");
             MenderStatus::Failed
         })?;
@@ -462,9 +446,9 @@ pub async fn mender_artifact_read_header_info(ctx: &mut MenderArtifactContext) -
         return Ok((MenderStatus::Ok, ()));
     }
 
-    let json_str = match core::str::from_utf8(&ctx.input.data[..ctx.file.size]) {
+    let json_str = match core::str::from_utf8(&ctx.input.data[..ctx.file.size as usize]) {
         Ok(s) => {
-            log_debug!("JSON string: {}, length: {}", s, s.len());
+            log_info!("JSON string: {}, length: {}", s, s.len());
             s
         }
         Err(e) => {
@@ -496,22 +480,14 @@ pub async fn mender_artifact_read_header_info(ctx: &mut MenderArtifactContext) -
 
     // Set payloads size and initialize new vector
     ctx.payloads.size = 1; // We only handle one payload
-    ctx.payloads.values = HVec::new();
+    ctx.payloads.values = Vec::new();
 
     // Add the payload to the vector
-    if ctx
-        .payloads
-        .values
-        .push(MenderArtifactPayload {
-            payload_type: header_info.payloads[0].payload_type.clone(),
-            checksum: HString::new(),
-            meta_data: None,
-        })
-        .is_err()
-    {
-        log_error!("Unable to allocate memory");
-        return Err(MenderStatus::Failed);
-    }
+    ctx.payloads.values.push(MenderArtifactPayload {
+        payload_type: header_info.payloads[0].payload_type.as_str().to_string(),
+        checksum: String::new(),
+        meta_data: None,
+    });
 
     // Shift data in the buffer
     if mender_artifact_shift_data(
@@ -536,7 +512,7 @@ pub async fn mender_artifact_read_type_info(ctx: &mut MenderArtifactContext) -> 
         return Ok((MenderStatus::Ok, ()));
     }
 
-    let json_str = match core::str::from_utf8(&ctx.input.data[..ctx.file.size]) {
+    let json_str = match core::str::from_utf8(&ctx.input.data[..ctx.file.size as usize]) {
         Ok(s) => {
             log_debug!("Type-info JSON string: {}, length: {}", s, s.len());
             s
@@ -572,7 +548,7 @@ pub async fn mender_artifact_read_type_info(ctx: &mut MenderArtifactContext) -> 
                 })?;
 
                 let index_str = &name[start..start + end];
-                let index = index_str.parse::<usize>().map_err(|_| {
+                let index = index_str.parse::<u32>().map_err(|_| {
                     log_error!("Invalid artifact format");
                     MenderStatus::Failed
                 })?;
@@ -584,10 +560,11 @@ pub async fn mender_artifact_read_type_info(ctx: &mut MenderArtifactContext) -> 
                 index
             };
 
-            ctx.payloads.values[index].checksum = type_info.artifact_provides.checksum;
+            ctx.payloads.values[index as usize].checksum =
+                type_info.artifact_provides.checksum.as_str().to_string();
             log_info!(
                 "type-info checksum: {}",
-                ctx.payloads.values[index].checksum.as_str()
+                ctx.payloads.values[index as usize].checksum.as_str()
             );
 
             // Shift data in the buffer
@@ -632,7 +609,7 @@ pub async fn mender_artifact_read_meta_data(ctx: &mut MenderArtifactContext) -> 
         })?;
 
         let index_str = &name[start..start + end];
-        let index = index_str.parse::<usize>().map_err(|_| {
+        let index = index_str.parse::<u32>().map_err(|_| {
             log_error!("Invalid artifact format");
             MenderStatus::Failed
         })?;
@@ -662,7 +639,7 @@ pub async fn mender_artifact_read_meta_data(ctx: &mut MenderArtifactContext) -> 
     }
 
     // First log the raw JSON string
-    let json_str = match core::str::from_utf8(&ctx.input.data[..ctx.file.size]) {
+    let json_str = match core::str::from_utf8(&ctx.input.data[..ctx.file.size as usize]) {
         Ok(s) => {
             log_debug!("Meta-data JSON string: {}, length: {}", s, s.len());
             s
@@ -680,7 +657,7 @@ pub async fn mender_artifact_read_meta_data(ctx: &mut MenderArtifactContext) -> 
 
     // Read meta-data
     let (meta_data, bytes_read): (JsonResponse, _) =
-        serde_json_core::from_slice(&ctx.input.data[..ctx.file.size]).map_err(|e| {
+        serde_json_core::from_slice(&ctx.input.data[..ctx.file.size as usize]).map_err(|e| {
             log_error!(
                 "Unable to parse meta-data, error: {}, json_content: {}",
                 e,
@@ -693,10 +670,10 @@ pub async fn mender_artifact_read_meta_data(ctx: &mut MenderArtifactContext) -> 
     log_info!(
         "Successfully parsed meta-data, bytes read: {}, meta_data: {}",
         bytes_read,
-        meta_data.as_str()
+        meta_data.error
     );
 
-    ctx.payloads.values[index].meta_data = Some(meta_data);
+    ctx.payloads.values[index as usize].meta_data = Some(meta_data);
 
     // Shift data in the buffer
     if let Err(e) = mender_artifact_shift_data(
@@ -725,7 +702,7 @@ pub async fn mender_artifact_read_data(
             .and_then(|s| s.split(".tar").next())
         {
             // Parse the number, expecting format like "0000"
-            num_str.parse::<usize>().map_err(|_| {
+            num_str.parse::<u32>().map_err(|_| {
                 log_error!("Invalid artifact format - failed to parse index");
                 MenderStatus::Failed
             })?
@@ -747,22 +724,22 @@ pub async fn mender_artifact_read_data(
         log_info!("mender_artifact_read_data: Beginning of the data file");
         if let Some(callback_fn) = callback {
             // Get the meta_data string safely
-            let meta_data_str = ctx.payloads.values[index]
+            let meta_data_str = ctx.payloads.values[index as usize]
                 .meta_data
                 .as_ref()
-                .map(|m| m.as_str())
+                .map(|m| m.error.as_str())
                 .unwrap_or("");
 
             callback_fn
                 .call(MenderCallbackInfo {
-                    type_str: Some(&ctx.payloads.values[index].payload_type),
+                    type_str: Some(&ctx.payloads.values[index as usize].payload_type),
                     meta: Some(meta_data_str),
                     file: None,
                     size: 0,
                     data: b"",
                     offset: 0,
                     total: 0,
-                    chksum: ctx.payloads.values[index].checksum.as_bytes(),
+                    chksum: ctx.payloads.values[index as usize].checksum.as_bytes(),
                 })
                 .await?;
 
@@ -802,22 +779,22 @@ pub async fn mender_artifact_read_data(
 
         // Invoke callback
         if let Some(callback_fn) = callback {
-            let meta_data_str = ctx.payloads.values[index]
+            let meta_data_str = ctx.payloads.values[index as usize]
                 .meta_data
                 .as_ref()
-                .map(|m| m.as_str())
+                .map(|m| m.error.as_str())
                 .unwrap_or(""); // Default to empty string if no meta_data
 
             callback_fn
                 .call(MenderCallbackInfo {
-                    type_str: Some(&ctx.payloads.values[index].payload_type),
+                    type_str: Some(&ctx.payloads.values[index as usize].payload_type),
                     meta: Some(meta_data_str),
                     file: Some(filename),
                     size: ctx.file.size,
                     data: &ctx.input.data,
                     offset: ctx.file.index,
                     total: block_length,
-                    chksum: ctx.payloads.values[index].checksum.as_bytes(),
+                    chksum: ctx.payloads.values[index as usize].checksum.as_bytes(),
                 })
                 .await?;
         } else {
@@ -867,14 +844,16 @@ pub async fn mender_artifact_drop_file(ctx: &mut MenderArtifactContext) -> Mende
 
 pub fn mender_artifact_shift_data(
     ctx: &mut MenderArtifactContext,
-    length: usize,
+    length: u32,
 ) -> MenderResult<()> {
     if length > 0 {
         if ctx.input.length > length {
             // Shift remaining data to front of vector
-            ctx.input.data.copy_within(length.., 0);
+            ctx.input.data.copy_within(length as usize.., 0);
             // Truncate vector to new length
-            ctx.input.data.truncate(ctx.input.length - length);
+            ctx.input
+                .data
+                .truncate((ctx.input.length - length) as usize);
             ctx.input.length -= length;
         } else {
             // Clear all data
@@ -886,6 +865,6 @@ pub fn mender_artifact_shift_data(
     Ok((MenderStatus::Ok, ()))
 }
 
-pub fn mender_artifact_round_up(length: usize, incr: usize) -> usize {
+pub fn mender_artifact_round_up(length: u32, incr: u32) -> u32 {
     length + (incr - length % incr) % incr
 }

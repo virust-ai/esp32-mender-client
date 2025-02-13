@@ -21,11 +21,10 @@ use esp_wifi::{
     },
     EspWifiController,
 };
-
+use alloc::string::ToString;
 use esp32_mender_client::external::esp_hal_ota::OtaImgState;
 use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_confirm_image;
 use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_is_image_confirmed;
-use heapless::String as HString;
 
 use esp32_mender_client::external::esp_hal_ota::Ota;
 use esp32_mender_client::mender_mcu_client::add_ons::inventory::mender_inventory::{
@@ -141,7 +140,7 @@ async fn main(spawner: Spawner) -> ! {
         config.cpu_clock = CpuClock::max();
         config
     });
-    esp_alloc::heap_allocator!(91 * 1024);
+    esp_alloc::heap_allocator!(95 * 1024);
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     let timg1 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timg1.timer0);
@@ -158,7 +157,7 @@ async fn main(spawner: Spawner) -> ! {
     let config = embassy_net::Config::dhcpv4(Default::default());
 
     let seed = (trng.rng.random() as u64) << 32 | trng.rng.random() as u64;
-    println!("Test version 1.0");
+    println!("Test {}-{}", env!("ESP_DEVICE_NAME"), env!("ESP_DEVICE_VERSION"));
     // // Init network stack
     // let stack = &*mk_static!(
     //     Stack<WifiDevice<'_, WifiStaDevice>>,
@@ -243,15 +242,21 @@ async fn main(spawner: Spawner) -> ! {
         store
     };
 
+    let device_type = env!("ESP_DEVICE_TYPE");
+    let device_name = env!("ESP_DEVICE_NAME");
+    let device_version = env!("ESP_DEVICE_VERSION");
     let tenant_token = option_env!("MENDER_CLIENT_TENANT_TOKEN");
     let config = MenderClientConfig::new(
         identity,
-        "artifact-1.0",
-        "esp32c3",
+        &format!("{}-{}", device_name, device_version),
+        device_type,
         option_env!("MENDER_CLIENT_URL").unwrap_or("https://hosted.mender.io"),
         tenant_token,
     )
-    .with_recommissioning(false);
+    .with_auth_interval(60)
+    .with_update_interval(300)
+    .with_recommissioning(false)
+    .with_device_update_done_reset(true);
 
     // Creating an instance:
     let callbacks = MenderClientCallbacks::new(
@@ -289,39 +294,39 @@ async fn main(spawner: Spawner) -> ! {
         .await
         .expect("Failed to create work");
 
-    let mut work2 = mender_scheduler_work_create(mender_client_work_test, 5, "my_work2")
-        .await
-        .expect("Failed to create work");
+    // let mut work2 = mender_scheduler_work_create(mender_client_work_test, 5, "my_work2")
+    //     .await
+    //     .expect("Failed to create work");
 
     // Change period if needed
     mender_scheduler_work_set_period(&mut work, 10)
         .await
         .expect("Failed to set period");
-    mender_scheduler_work_set_period(&mut work2, 2)
-        .await
-        .expect("Failed to set period");
+    // mender_scheduler_work_set_period(&mut work2, 2)
+    //     .await
+    //     .expect("Failed to set period");
 
     // Activate the work
     mender_scheduler_work_activate(&mut work)
         .await
         .expect("Failed to activate work");
-    mender_scheduler_work_activate(&mut work2)
-        .await
-        .expect("Failed to activate work");
+    // mender_scheduler_work_activate(&mut work2)
+    //     .await
+    //     .expect("Failed to activate work");
 
     // Define the inventory items
     let inventory = [
         KeyStoreItem {
-            name: HString::<32>::try_from("mender-mcu-client").unwrap(),
-            value: HString::<32>::try_from(env!("CARGO_PKG_VERSION")).unwrap(),
+            name: "mender-mcu-client".to_string(),
+            value: env!("CARGO_PKG_VERSION").to_string(),
+        },
+        KeyStoreItem {      
+            name: "latitude".to_string(),
+            value: "45.8325".to_string(),
         },
         KeyStoreItem {
-            name: HString::<32>::try_from("latitude").unwrap(),
-            value: HString::<32>::try_from("45.8325").unwrap(),
-        },
-        KeyStoreItem {
-            name: HString::<32>::try_from("longitude").unwrap(),
-            value: HString::<32>::try_from("6.864722").unwrap(),
+            name: "longitude".to_string(),
+            value: "6.864722".to_string(),
         },
     ];
 

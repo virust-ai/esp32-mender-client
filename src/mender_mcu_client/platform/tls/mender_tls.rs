@@ -1,4 +1,4 @@
-use crate::global_variables::{TLS_PRIVATE_KEY_LENGTH, TLS_PUBLIC_KEY_LENGTH};
+use crate::mender_mcu_client::mender_prj_config::{TLS_PRIVATE_KEY_LENGTH, TLS_PUBLIC_KEY_LENGTH};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -111,7 +111,7 @@ async fn mender_tls_generate_authentication_keys(rng: &mut Trng<'static>) -> Men
         .to_vec();
 
     // Validate key sizes
-    if priv_key.len() > TLS_PRIVATE_KEY_LENGTH {
+    if priv_key.len() > TLS_PRIVATE_KEY_LENGTH as usize {
         log_error!(
             "Private key too large, length: {}, max: {}",
             priv_key.len(),
@@ -119,7 +119,7 @@ async fn mender_tls_generate_authentication_keys(rng: &mut Trng<'static>) -> Men
         );
         return Err(MenderStatus::Failed);
     }
-    if pub_key.len() > TLS_PUBLIC_KEY_LENGTH {
+    if pub_key.len() > TLS_PUBLIC_KEY_LENGTH as usize {
         log_error!(
             "Public key too large, length: {}, max: {}",
             pub_key.len(),

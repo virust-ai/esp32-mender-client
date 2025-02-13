@@ -21,11 +21,10 @@ use esp_wifi::{
     },
     EspWifiController,
 };
-
+use alloc::string::ToString;
 use esp32_mender_client::external::esp_hal_ota::OtaImgState;
 use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_confirm_image;
 use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_is_image_confirmed;
-use heapless::String as HString;
 
 use esp32_mender_client::external::esp_hal_ota::Ota;
 use esp32_mender_client::mender_mcu_client::add_ons::inventory::mender_inventory::{
@@ -158,7 +157,7 @@ async fn main(spawner: Spawner) -> ! {
     let config = embassy_net::Config::dhcpv4(Default::default());
 
     let seed = (trng.rng.random() as u64) << 32 | trng.rng.random() as u64;
-    println!("Test version 1.0");
+    println!("Test {}-{}", env!("ESP_DEVICE_NAME"), env!("ESP_DEVICE_VERSION"));
     // // Init network stack
     // let stack = &*mk_static!(
     //     Stack<WifiDevice<'_, WifiStaDevice>>,
@@ -243,15 +242,21 @@ async fn main(spawner: Spawner) -> ! {
         store
     };
 
+    let device_type = env!("ESP_DEVICE_TYPE");
+    let device_name = env!("ESP_DEVICE_NAME");
+    let device_version = env!("ESP_DEVICE_VERSION");
     let tenant_token = option_env!("MENDER_CLIENT_TENANT_TOKEN");
     let config = MenderClientConfig::new(
         identity,
-        "artifact-1.0",
-        "esp32c6",
+        &format!("{}-{}", device_name, device_version),
+        device_type,
         option_env!("MENDER_CLIENT_URL").unwrap_or("https://hosted.mender.io"),
         tenant_token,
     )
-    .with_recommissioning(false);
+    .with_auth_interval(60)
+    .with_update_interval(300)
+    .with_recommissioning(false)
+    .with_device_update_done_reset(true);
 
     // Creating an instance:
     let callbacks = MenderClientCallbacks::new(
@@ -312,16 +317,16 @@ async fn main(spawner: Spawner) -> ! {
     // Define the inventory items
     let inventory = [
         KeyStoreItem {
-            name: HString::<32>::try_from("mender-mcu-client").unwrap(),
-            value: HString::<32>::try_from(env!("CARGO_PKG_VERSION")).unwrap(),
+            name: "mender-mcu-client".to_string(),
+            value: env!("CARGO_PKG_VERSION").to_string(),
         },
         KeyStoreItem {
-            name: HString::<32>::try_from("latitude").unwrap(),
-            value: HString::<32>::try_from("45.8325").unwrap(),
+            name: "latitude".to_string(),
+            value: "45.8325".to_string(),
         },
         KeyStoreItem {
-            name: HString::<32>::try_from("longitude").unwrap(),
-            value: HString::<32>::try_from("6.864722").unwrap(),
+            name: "longitude".to_string(),
+            value: "6.864722".to_string(),
         },
     ];
 
