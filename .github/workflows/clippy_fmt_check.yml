@@ -24,6 +24,8 @@ jobs:
         run: |
           rustup component add rustfmt
           rustup component add clippy
+          rustup target add riscv32imc-unknown-none-elf
+          rustup target add riscv32imac-unknown-none-elf
           sudo apt-get install build-essential
           sudo apt-get install -y libudev-dev
           sudo apt install pkg-config
@@ -35,6 +37,30 @@ jobs:
         run: cargo fmt --all -- --check
         continue-on-error: false
 
-      - name: Clippy
-        run: cargo clippy -- -D warnings
+      #- name: Clippy (esp32c2)
+      #  run: cargo clippy --target riscv32imc-unknown-none-elf --features esp32c2 -- -D warnings
+      #  continue-on-error: false
+
+      - name: Clippy (esp32c3)
+        run: cargo clippy --target riscv32imc-unknown-none-elf --features esp32c3 -- -D warnings
         continue-on-error: false
+
+      #- name: Clippy (esp32h2)
+      #  run: cargo clippy --target riscv32imc-unknown-none-elf --features esp32h2 -- -D warnings
+      #  continue-on-error: false
+
+      - name: Clippy (esp32c6)
+        run: cargo clippy --target riscv32imac-unknown-none-elf --features esp32c6 -- -D warnings
+        continue-on-error: false
+
+      #- name: Clippy (ESP32)
+      #  run: cargo clippy --target xtensa-esp32-none-elf --features esp32 -- -D warnings
+      #  continue-on-error: false    
+
+      #- name: Clippy (esp32s2)
+      #  run: cargo clippy --target xtensa-esp32s2-none-elf --features esp32s2 -- -D warnings
+      #  continue-on-error: false    
+
+      #- name: Clippy (esp32s3)
+      #  run: cargo clippy --target xtensa-esp32s3-none-elf --features esp32s3 -- -D warnings
+      #  continue-on-error: false               

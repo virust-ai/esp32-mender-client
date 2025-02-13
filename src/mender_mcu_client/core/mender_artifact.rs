@@ -143,6 +143,12 @@ pub struct RootfsImageProvides {
     pub version: HString<MAX_STRING_PAYLOADS>,
 }
 
+impl Default for MenderArtifactContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MenderArtifactContext {
     pub fn new() -> Self {
         Self {

@@ -1,7 +1,4 @@
-use super::super::mmu_hal::{MMU_PAGE_16KB, MMU_PAGE_32KB, MMU_PAGE_64KB, MMU_PAGE_8KB};
-#[allow(unused_imports)]
-use crate::{log_debug, log_error, log_info, log_warn};
-use esp_hal::peripherals::SPI0;
+use crate::mmu_hal::{MMU_PAGE_16KB, MMU_PAGE_32KB, MMU_PAGE_64KB, MMU_PAGE_8KB};
 
 const SOC_MMU_ENTRY_NUM: u32 = 256;
 const SOC_MMU_VALID_VAL_MASK: u32 = 0x1ff;
@@ -12,7 +9,7 @@ fn soc_mmu_vaddr_mask(mmu_id: u32) -> u32 {
 }
 
 pub fn mmu_ll_get_page_size(_mmu_id: u32) -> u32 {
-    let spi_mem = unsafe { &*SPI0::ptr() };
+    let spi_mem = unsafe { &*esp32h2::SPI0::ptr() };
     let page_size_code = spi_mem.mmu_power_ctrl().read().spi_mmu_page_size().bits();
 
     match page_size_code {
@@ -30,7 +27,8 @@ pub fn mmu_ll_get_entry_id(mmu_id: u32, vaddr: u32) -> u32 {
         MMU_PAGE_16KB => 14,
         MMU_PAGE_8KB => 13,
         _ => {
-            log_error!("mmu_ll_get_entry_id failed!");
+            #[cfg(feature = "log")]
+            log::error!("mmu_ll_get_entry_id failed!");
 
             0
         }
@@ -46,13 +44,14 @@ pub fn mmu_ll_entry_id_to_paddr_base(mmu_id: u32, entry_id: u32) -> u32 {
         MMU_PAGE_16KB => 14,
         MMU_PAGE_8KB => 13,
         _ => {
-            log_error!("mmu_ll_entry_id_to_paddr_base failed!");
+            #[cfg(feature = "log")]
+            log::error!("mmu_ll_entry_id_to_paddr_base failed!");
 
             0
         }
     };
 
-    let spi_mem = unsafe { &*SPI0::ptr() };
+    let spi_mem = unsafe { &*esp32h2::SPI0::ptr() };
     spi_mem
         .mmu_item_index()
         .write(|w| unsafe { w.spi_mmu_item_index().bits(entry_id) });
@@ -67,7 +66,7 @@ pub fn mmu_ll_entry_id_to_paddr_base(mmu_id: u32, entry_id: u32) -> u32 {
 }
 
 pub fn mmu_ll_check_entry_valid(_mmu_id: u32, entry_id: u32) -> bool {
-    let spi_mem = unsafe { &*SPI0::ptr() };
+    let spi_mem = unsafe { &*esp32h2::SPI0::ptr() };
     spi_mem
         .mmu_item_index()
         .write(|w| unsafe { w.spi_mmu_item_index().bits(entry_id) });
