@@ -57,6 +57,8 @@ MENDER_CLIENT_TENANT_TOKEN (optional)
    rustup install stable
    cargo install espup
    espup install
+   cargo install espflash
+
 
 
 2. **Compile and build the project**
@@ -67,3 +69,6 @@ MENDER_CLIENT_TENANT_TOKEN (optional)
 
 # Further Discussioin on Discord
 Please join us : https://discord.gg/b7vk6fza
+
+# Demo 
+- video demo on esp32c3 : https://youtu.be/N24ugg88bFo
