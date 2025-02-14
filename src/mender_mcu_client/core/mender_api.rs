@@ -99,7 +99,7 @@ pub async fn mender_api_init(
 }
 
 // Helper function to get config reference
-pub async fn get_config() -> MenderResult<MenderApiConfig> {
+async fn get_config() -> MenderResult<MenderApiConfig> {
     let conf = MENDER_API_CONFIG.lock().await;
     conf.as_ref()
         .ok_or(MenderStatus::Other)
@@ -137,7 +137,6 @@ fn mender_api_print_response_error(response: Option<&str>, status: i32) {
     }
 }
 
-#[allow(dead_code)]
 pub async fn mender_api_exit() {
     let mut conf = MENDER_API_CONFIG.lock().await;
     *conf = None;
@@ -557,7 +556,7 @@ pub async fn mender_api_download_artifact(
 }
 
 // You'll also need this helper callback function
-pub async fn mender_api_http_artifact_callback(
+async fn mender_api_http_artifact_callback(
     event: HttpClientEvent,
     data: Option<&[u8]>,
     _response_data: Option<&mut MenderHttpResponseData>,

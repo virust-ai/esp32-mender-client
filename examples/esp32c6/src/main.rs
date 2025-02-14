@@ -254,7 +254,7 @@ async fn main(spawner: Spawner) -> ! {
         tenant_token,
     )
     .with_auth_interval(60)
-    .with_update_interval(300)
+    .with_update_interval(120)
     .with_recommissioning(false)
     .with_device_update_done_reset(true);
 

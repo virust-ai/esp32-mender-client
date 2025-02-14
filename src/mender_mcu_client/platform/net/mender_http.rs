@@ -33,8 +33,7 @@ const USER_AGENT: &str = concat!(
 
 static MENDER_HTTP_CONFIG: Mutex<CriticalSectionRawMutex, Option<MenderHttpConfig>> =
     Mutex::new(None);
-//static MENDER_HTTP_STACK: Mutex<CriticalSectionRawMutex, Option<Stack<WifiDevice<'static, WifiStaDevice>>>> = Mutex::new(None);
-//pub struct SendSyncStack(pub &'static Stack<WifiDevice<'static, WifiStaDevice>>);
+
 pub struct SendSyncStack(pub Stack<'static>);
 
 unsafe impl Send for SendSyncStack {}

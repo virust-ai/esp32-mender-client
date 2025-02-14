@@ -200,7 +200,6 @@ pub fn mender_flash_confirm_image() -> MenderResult<()> {
     Ok((MenderStatus::Ok, ()))
 }
 
-#[allow(dead_code)]
 pub fn mender_flash_is_image_confirmed() -> bool {
     log_info!("mender_flash_is_image_confirmed");
     let mut ota = match Ota::new(FlashStorage::new()) {

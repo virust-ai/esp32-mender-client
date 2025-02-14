@@ -1,2 +1,2 @@
 pub mod mender_inventory;
-pub mod mender_inventory_api;
+pub(crate) mod mender_inventory_api;

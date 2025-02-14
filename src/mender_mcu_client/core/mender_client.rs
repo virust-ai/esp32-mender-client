@@ -37,6 +37,7 @@ use crate::custom::mender_config::{
 use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::vec::Vec;
 use core::future::Future;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Debug, Clone)]
 pub struct MenderClientConfig {
@@ -182,32 +183,22 @@ unsafe impl Sync for StaticTrng {}
 // Add this with other static variables at the top
 pub static MENDER_CLIENT_RNG: Mutex<CriticalSectionRawMutex, Option<StaticTrng>> = Mutex::new(None);
 
-static MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE: Mutex<CriticalSectionRawMutex, bool> =
-    Mutex::new(false);
-static MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART: Mutex<CriticalSectionRawMutex, bool> =
-    Mutex::new(false);
+static MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE: AtomicBool = AtomicBool::new(false);
+
+static MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
-pub struct ArtifactTypeHandler {
-    pub type_name: String,
-    pub callback: &'static dyn MenderArtifactCallback,
-    pub needs_restart: bool,
-    pub artifact_name: String,
+struct ArtifactTypeHandler {
+    type_name: String,
+    callback: &'static dyn MenderArtifactCallback,
+    needs_restart: bool,
+    artifact_name: String,
 }
 
 static MENDER_CLIENT_ARTIFACT_TYPES: Mutex<
     CriticalSectionRawMutex,
     Option<Vec<ArtifactTypeHandler>>,
 > = Mutex::new(None);
-
-pub struct CryptoRng<'a>(Trng<'a>);
-
-impl<'a> CryptoRng<'a> {
-    #[allow(dead_code)]
-    pub fn new(rng: Trng<'a>) -> Self {
-        CryptoRng(rng)
-    }
-}
 
 // Make FlashCallback static
 static FLASH_CALLBACK: FlashCallback = FlashCallback;
@@ -314,7 +305,7 @@ pub async fn mender_client_init(
     }
 
     // Initialize TLS
-    if (mender_tls::mender_tls_init().await).is_err() {
+    if (mender_tls::mender_tls_init()).is_err() {
         log_error!("Unable to initialize TLS");
         return Err(MenderStatus::Other);
     }
@@ -456,7 +447,6 @@ pub async fn mender_client_activate() -> MenderStatus {
     }
 }
 
-#[allow(dead_code)]
 async fn deactivate_addons() -> MenderResult<()> {
     let addons = MENDER_CLIENT_ADDONS.lock().await;
 
@@ -471,7 +461,6 @@ async fn deactivate_addons() -> MenderResult<()> {
     Ok((MenderStatus::Ok, ()))
 }
 
-#[allow(dead_code)]
 pub async fn mender_client_deactivate() -> MenderStatus {
     // Deactivate add-ons
     if let Err(e) = deactivate_addons().await {
@@ -768,15 +757,9 @@ async fn mender_client_update_work_function() -> MenderStatus {
     // Unescape the URI - replace \u0026 with &
     let unescaped_uri = uri.replace("\\u0026", "&");
 
-    {
-        // Reset flags
-        let mut needs_set_pending_image = MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE
-            .lock()
-            .await;
-        let mut needs_restart = MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART.lock().await;
-        *needs_set_pending_image = false;
-        *needs_restart = false;
-    }
+    // Reset flags
+    MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE.store(false, Ordering::SeqCst);
+    MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART.store(false, Ordering::SeqCst);
 
     // Create deployment data structure
     let deployment_data = DeploymentData {
@@ -810,10 +793,9 @@ async fn mender_client_update_work_function() -> MenderStatus {
                 let mut deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
                 *deployment = None;
             }
-            let needs_set_pending_image = MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE
-                .lock()
-                .await;
-            if *needs_set_pending_image {
+            let needs_set_pending_image =
+                MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE.load(Ordering::SeqCst);
+            if needs_set_pending_image {
                 match mender_flash::mender_flash_abort_deployment().await {
                     Ok(_) => (),
                     Err(e) => return e,
@@ -826,10 +808,9 @@ async fn mender_client_update_work_function() -> MenderStatus {
     // Set boot partition
     log_info!("Download done, installing artifact");
     mender_client_publish_deployment_status(&id, DeploymentStatus::Installing).await;
-    let needs_set_pending_image = MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE
-        .lock()
-        .await;
-    if *needs_set_pending_image {
+    let needs_set_pending_image =
+        MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE.load(Ordering::SeqCst);
+    if needs_set_pending_image {
         if let Err(e) = mender_flash::mender_flash_set_pending_image().await {
             log_error!("Unable to set boot partition");
             mender_client_publish_deployment_status(&id, DeploymentStatus::Failure).await;
@@ -842,8 +823,8 @@ async fn mender_client_update_work_function() -> MenderStatus {
     }
 
     // Handle restart case
-    let needs_restart = MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART.lock().await;
-    if *needs_restart {
+    let needs_restart = MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART.load(Ordering::SeqCst);
+    if needs_restart {
         // Save deployment data
         let deployment_str: HString<256> = {
             let deployment = MENDER_CLIENT_DEPLOYMENT_DATA.lock().await;
@@ -997,9 +978,7 @@ async fn mender_client_download_artifact_callback(
 
                         // Set restart flag if needed
                         if artifact_handler.needs_restart {
-                            let mut needs_restart =
-                                MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART.lock().await;
-                            *needs_restart = true;
+                            MENDER_CLIENT_DEPLOYMENT_NEEDS_RESTART.store(true, Ordering::SeqCst);
                         }
                     }
 
@@ -1169,13 +1148,9 @@ async fn mender_client_download_artifact_flash_callback(
             }
         }
     }
-    //log_info!("mender_client_download_artifact_flash_callback: setting pending image flag");
-    // Set pending image flag
-    let mut needs_set_pending_image = MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE
-        .lock()
-        .await;
-    *needs_set_pending_image = true;
 
-    //log_info!("mender_client_download_artifact_flash_callback: done");
+    // Set pending image flag
+    MENDER_CLIENT_DEPLOYMENT_NEEDS_SET_PENDING_IMAGE.store(true, Ordering::SeqCst);
+
     Ok((MenderStatus::Ok, ()))
 }

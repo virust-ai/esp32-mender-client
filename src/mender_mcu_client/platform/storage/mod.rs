@@ -1,1 +1,1 @@
-pub mod mender_storage;
+pub(crate) mod mender_storage;

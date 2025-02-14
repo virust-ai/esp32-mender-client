@@ -93,7 +93,6 @@ where
     }
 
     /// Returns ota progress in f32 (0..1)
-    #[allow(dead_code)]
     pub fn get_ota_progress(&self) -> f32 {
         if self.progress.is_none() {
             log_warn!("[OTA] Cannot get ota progress! Seems like update wasn't started yet.");
@@ -413,7 +412,6 @@ where
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn ota_mark_app_invalid_rollback(&mut self) -> Result<()> {
         let (current_slot_nmb, current_slot) = self.get_current_slot()?;
         if current_slot.ota_state != OtaImgState::EspOtaImgValid {

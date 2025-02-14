@@ -140,7 +140,7 @@ async fn main(spawner: Spawner) -> ! {
         config.cpu_clock = CpuClock::max();
         config
     });
-    esp_alloc::heap_allocator!(95 * 1024);
+    esp_alloc::heap_allocator!(120 * 1024);
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     let timg1 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timg1.timer0);
@@ -254,7 +254,7 @@ async fn main(spawner: Spawner) -> ! {
         tenant_token,
     )
     .with_auth_interval(60)
-    .with_update_interval(300)
+    .with_update_interval(120)
     .with_recommissioning(false)
     .with_device_update_done_reset(true);
 
