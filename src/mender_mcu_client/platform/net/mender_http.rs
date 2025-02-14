@@ -1,5 +1,4 @@
 extern crate alloc;
-
 use crate::custom::mender_common::MenderCallback;
 use crate::custom::mender_config::ROOT_CERT;
 use crate::mender_mcu_client::core::mender_client::MENDER_CLIENT_RNG;
@@ -34,8 +33,7 @@ const USER_AGENT: &str = concat!(
 
 static MENDER_HTTP_CONFIG: Mutex<CriticalSectionRawMutex, Option<MenderHttpConfig>> =
     Mutex::new(None);
-//static MENDER_HTTP_STACK: Mutex<CriticalSectionRawMutex, Option<Stack<WifiDevice<'static, WifiStaDevice>>>> = Mutex::new(None);
-//pub struct SendSyncStack(pub &'static Stack<WifiDevice<'static, WifiStaDevice>>);
+
 pub struct SendSyncStack(pub Stack<'static>);
 
 unsafe impl Send for SendSyncStack {}
@@ -406,9 +404,9 @@ async fn try_http_request<'a>(
     log_debug!("url: {}", url);
 
     let mut read_record_buffer = [0u8; 16640];
-    let mut write_record_buffer = [0u8; 4096];
-    let mut rx_buf = [0; 4096];
-    let mut tx_buf = [0; 4096];
+    let mut write_record_buffer = [0u8; HTTP_RECV_BUF_LENGTH];
+    let mut rx_buf = [0; HTTP_RECV_BUF_LENGTH];
+    let mut tx_buf = [0; HTTP_RECV_BUF_LENGTH];
 
     let mut retry_count = 0;
     const MAX_RETRIES: u32 = 3;

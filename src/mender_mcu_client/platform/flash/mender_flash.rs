@@ -16,8 +16,8 @@ static FLASH_HANDLE: Mutex<CriticalSectionRawMutex, Option<FlashHandle>> = Mutex
 
 struct FlashHandle {
     filename: String,
-    size: usize,
-    current_position: usize,
+    size: u32,
+    current_position: u32,
     ota: Ota<FlashStorage>,
 }
 
@@ -32,7 +32,7 @@ impl fmt::Debug for FlashHandle {
     }
 }
 
-pub async fn mender_flash_open(filename: &str, size: usize, chksum: &[u8]) -> MenderResult<()> {
+pub async fn mender_flash_open(filename: &str, size: u32, chksum: &[u8]) -> MenderResult<()> {
     log_info!(
         "mender_flash_open, filename: {:?}, size: {}",
         filename,
@@ -57,7 +57,7 @@ pub async fn mender_flash_open(filename: &str, size: usize, chksum: &[u8]) -> Me
 
     // Begin OTA update
     // Note: target_crc is set to 0 initially, it will be updated later if needed
-    if let Err(e) = ota.ota_begin(size as u32, chksum) {
+    if let Err(e) = ota.ota_begin(size, chksum) {
         log_error!("Failed to begin OTA, error: {:?}", e);
         return Err(MenderStatus::Failed);
     }
@@ -74,7 +74,7 @@ pub async fn mender_flash_open(filename: &str, size: usize, chksum: &[u8]) -> Me
     Ok((MenderStatus::Ok, ()))
 }
 
-pub async fn mender_flash_write(data: &[u8], index: usize, length: usize) -> MenderResult<()> {
+pub async fn mender_flash_write(data: &[u8], index: u32, length: u32) -> MenderResult<()> {
     log_info!("mender_flash_write, index: {}, length: {}", index, length);
     let mut handle = FLASH_HANDLE.lock().await;
 
@@ -200,7 +200,6 @@ pub fn mender_flash_confirm_image() -> MenderResult<()> {
     Ok((MenderStatus::Ok, ()))
 }
 
-#[allow(dead_code)]
 pub fn mender_flash_is_image_confirmed() -> bool {
     log_info!("mender_flash_is_image_confirmed");
     let mut ota = match Ota::new(FlashStorage::new()) {

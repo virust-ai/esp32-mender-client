@@ -48,7 +48,7 @@ where
     }
 
     fn get_partitions(&self) -> &[(u32, u32)] {
-        &self.pinfo.ota_partitions[..self.pinfo.ota_partitions_count]
+        &self.pinfo.ota_partitions[..self.pinfo.ota_partitions_count as usize]
     }
 
     /// To begin ota update (need to provide flash size)
@@ -73,7 +73,7 @@ where
             flash_size: size,
             remaining: size,
             flash_offset: ota_offset,
-            target_partition: next_part,
+            target_partition: next_part as u32,
             target_hash,
         });
 
@@ -93,7 +93,6 @@ where
     }
 
     /// Returns ota progress in f32 (0..1)
-    #[allow(dead_code)]
     pub fn get_ota_progress(&self) -> f32 {
         if self.progress.is_none() {
             log_warn!("[OTA] Cannot get ota progress! Seems like update wasn't started yet.");
@@ -106,29 +105,29 @@ where
     }
 
     /// Writes next firmware chunk
-    pub fn ota_write_chunk(&mut self, chunk: &[u8], length: usize) -> Result<bool> {
+    pub fn ota_write_chunk(&mut self, chunk: &[u8], length: u32) -> Result<bool> {
         let progress = self.progress.as_mut().ok_or(OtaError::OtaNotStarted)?;
 
         if progress.remaining == 0 {
             return Ok(true);
         }
 
-        if length as u32 > progress.remaining {
+        if length > progress.remaining {
             log_error!("[OTA] Write size exceeds remaining size");
             return Err(OtaError::FlashRWError);
         }
 
         //let write_size = chunk.len() as u32;
-        let write_size = length as u32;
-        let write_size = write_size.min(progress.remaining) as usize;
+        let write_size = length;
+        let write_size = write_size.min(progress.remaining);
 
         self.flash
-            .write(progress.flash_offset, &chunk[..write_size])
+            .write(progress.flash_offset, &chunk[..write_size as usize])
             .map_err(|_| OtaError::FlashRWError)?;
 
-        progress.last_hash.update(&chunk[..write_size]);
-        progress.flash_offset += write_size as u32;
-        progress.remaining -= write_size as u32;
+        progress.last_hash.update(&chunk[..write_size as usize]);
+        progress.flash_offset += write_size;
+        progress.remaining -= write_size;
 
         Ok(progress.remaining == 0)
     }
@@ -182,7 +181,7 @@ where
         let mut hasher = Sha256::new();
         let mut bytes = [0; OTA_VERIFY_READ_SIZE];
 
-        let mut partition_offset = self.pinfo.ota_partitions[progress.target_partition].0;
+        let mut partition_offset = self.pinfo.ota_partitions[progress.target_partition as usize].0;
         let mut remaining = progress.flash_size;
 
         // Add debug logging
@@ -216,12 +215,13 @@ where
     }
 
     /// Sets ota boot target partition
-    pub fn set_target_ota_boot_partition(&mut self, target: usize, state: OtaImgState) {
+    pub fn set_target_ota_boot_partition(&mut self, target: u32, state: OtaImgState) {
         let (slot1, slot2) = self.get_ota_boot_entries();
         let (seq1, seq2) = (slot1.seq, slot2.seq);
 
         let mut target_seq = seq1.max(seq2);
-        while helpers::seq_to_part(target_seq, self.pinfo.ota_partitions_count) != target
+        while helpers::seq_to_part(target_seq, self.pinfo.ota_partitions_count as usize)
+            != target as usize
             || target_seq == 0
         {
             target_seq += 1;
@@ -360,7 +360,7 @@ where
     /// or if user skips some ota partitions: ota0, ota2, ota3...
     pub fn get_next_ota_partition(&self) -> Option<usize> {
         let curr_part = mmu_hal::esp_get_current_running_partition(self.get_partitions());
-        curr_part.map(|next_part| (next_part + 1) % self.pinfo.ota_partitions_count)
+        curr_part.map(|next_part| (next_part + 1) % self.pinfo.ota_partitions_count as usize)
     }
 
     fn get_current_slot(&mut self) -> Result<(u8, EspOtaSelectEntry)> {
@@ -369,8 +369,8 @@ where
             .get_currently_booted_partition()
             .ok_or(OtaError::CannotFindCurrentBootPartition)?;
 
-        let slot1_part = helpers::seq_to_part(slot1.seq, self.pinfo.ota_partitions_count);
-        let slot2_part = helpers::seq_to_part(slot2.seq, self.pinfo.ota_partitions_count);
+        let slot1_part = helpers::seq_to_part(slot1.seq, self.pinfo.ota_partitions_count as usize);
+        let slot2_part = helpers::seq_to_part(slot2.seq, self.pinfo.ota_partitions_count as usize);
         if current_partition == slot1_part {
             return Ok((1, slot1));
         } else if current_partition == slot2_part {
@@ -386,8 +386,8 @@ where
             .get_currently_booted_partition()
             .ok_or(OtaError::CannotFindCurrentBootPartition)?;
 
-        let slot1_part = helpers::seq_to_part(slot1.seq, self.pinfo.ota_partitions_count);
-        let slot2_part = helpers::seq_to_part(slot2.seq, self.pinfo.ota_partitions_count);
+        let slot1_part = helpers::seq_to_part(slot1.seq, self.pinfo.ota_partitions_count as usize);
+        let slot2_part = helpers::seq_to_part(slot2.seq, self.pinfo.ota_partitions_count as usize);
         if current_partition == slot1_part {
             return Ok(slot1.ota_state);
         } else if current_partition == slot2_part {
@@ -412,7 +412,6 @@ where
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn ota_mark_app_invalid_rollback(&mut self) -> Result<()> {
         let (current_slot_nmb, current_slot) = self.get_current_slot()?;
         if current_slot.ota_state != OtaImgState::EspOtaImgValid {
@@ -449,9 +448,18 @@ where
             let p_subtype = &bytes[3];
             let p_offset = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
             let p_size = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
-            //let p_name = core::str::from_utf8(&bytes[12..28]).unwrap();
-            //let p_flags = u32::from_le_bytes(bytes[28..32].try_into().unwrap());
-            //log_info!("{magic:?} {p_type} {p_subtype} {p_offset} {p_size} {p_name} {p_flags}");
+            let p_name = core::str::from_utf8(&bytes[12..28]).unwrap();
+            let p_flags = u32::from_le_bytes(bytes[28..32].try_into().unwrap());
+            log_debug!(
+                "{:?} {} {} {} {} {} {}",
+                magic,
+                p_type,
+                p_subtype,
+                p_offset,
+                p_size,
+                p_name,
+                p_flags
+            );
 
             if *p_type == 0 && *p_subtype >= FIRST_OTA_PART_SUBTYPE {
                 let ota_part_idx = *p_subtype - FIRST_OTA_PART_SUBTYPE;
@@ -460,7 +468,8 @@ where
                 }
 
                 last_ota_part = ota_part_idx as i8;
-                tmp_pinfo.ota_partitions[tmp_pinfo.ota_partitions_count] = (p_offset, p_size);
+                tmp_pinfo.ota_partitions[tmp_pinfo.ota_partitions_count as usize] =
+                    (p_offset, p_size);
                 tmp_pinfo.ota_partitions_count += 1;
             } else if *p_type == 1 && *p_subtype == 0 {
                 //otadata

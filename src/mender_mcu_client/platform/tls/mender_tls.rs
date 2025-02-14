@@ -1,4 +1,4 @@
-use crate::global_variables::{TLS_PRIVATE_KEY_LENGTH, TLS_PUBLIC_KEY_LENGTH};
+use crate::mender_mcu_client::mender_prj_config::{TLS_PRIVATE_KEY_LENGTH, TLS_PUBLIC_KEY_LENGTH};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -31,7 +31,7 @@ const PEM_END_PUBLIC_KEY: &str = "-----END PUBLIC KEY-----";
 pub static PRIVATE_KEY: Mutex<CriticalSectionRawMutex, Option<Vec<u8>>> = Mutex::new(None);
 static PUBLIC_KEY: Mutex<CriticalSectionRawMutex, Option<Vec<u8>>> = Mutex::new(None);
 
-pub async fn mender_tls_init() -> MenderResult<()> {
+pub fn mender_tls_init() -> MenderResult<()> {
     // Nothing to do
     Ok((MenderStatus::Ok, ()))
 }
@@ -111,7 +111,7 @@ async fn mender_tls_generate_authentication_keys(rng: &mut Trng<'static>) -> Men
         .to_vec();
 
     // Validate key sizes
-    if priv_key.len() > TLS_PRIVATE_KEY_LENGTH {
+    if priv_key.len() > TLS_PRIVATE_KEY_LENGTH as usize {
         log_error!(
             "Private key too large, length: {}, max: {}",
             priv_key.len(),
@@ -119,7 +119,7 @@ async fn mender_tls_generate_authentication_keys(rng: &mut Trng<'static>) -> Men
         );
         return Err(MenderStatus::Failed);
     }
-    if pub_key.len() > TLS_PUBLIC_KEY_LENGTH {
+    if pub_key.len() > TLS_PUBLIC_KEY_LENGTH as usize {
         log_error!(
             "Public key too large, length: {}, max: {}",
             pub_key.len(),
@@ -266,52 +266,6 @@ fn mender_tls_pem_write_buffer(der_data: &[u8]) -> MenderResult<String> {
     Ok((MenderStatus::Ok, pem))
 }
 
-// fn mender_tls_pem_write_buffer_with_headers(
-//     der_data: &[u8],
-//     pem_header: &str,
-//     pem_footer: &str,
-// ) -> MenderResult<String> {
-//     // Encode to base64
-//     let encoded_length = ((der_data.len() + 2) / 3) * 4;
-//     let mut b64_buf = vec![0u8; encoded_length];
-
-//     let actual_length = STANDARD
-//         .encode_slice(der_data, &mut b64_buf)
-//         .map_err(|_| MenderStatus::Failed)?;
-
-//     let b64_data =
-//         String::from_utf8(b64_buf[..actual_length].to_vec()).map_err(|_| MenderStatus::Failed)?;
-
-//     // Pre-calculate capacity for the full PEM
-//     let line_length = 64;
-//     let num_lines = (b64_data.len() + line_length - 1) / line_length;
-//     let capacity = pem_header.len() + 1 + // BEGIN line + newline
-//         pem_footer.len() + 1 + // END line + newline
-//         b64_data.len() +
-//         num_lines; // newlines for base64 content
-
-//     let mut pem = String::with_capacity(capacity);
-
-//     // Write PEM header
-//     writeln!(pem, "{}", pem_header).map_err(|_| MenderStatus::Failed)?;
-
-//     // Write Base64 content line by line
-//     for chunk in b64_data.as_bytes().chunks(line_length) {
-//         writeln!(
-//             pem,
-//             "{}",
-//             core::str::from_utf8(chunk).map_err(|_| MenderStatus::Failed)?
-//         )
-//         .map_err(|_| MenderStatus::Failed)?;
-//     }
-
-//     // Write PEM footer
-//     writeln!(pem, "{}", pem_footer).map_err(|_| MenderStatus::Failed)?;
-
-//     Ok((MenderStatus::Ok, pem))
-// }
-
-#[allow(dead_code)]
 pub async fn mender_tls_exit() -> MenderResult<()> {
     *PRIVATE_KEY.lock().await = None;
     *PUBLIC_KEY.lock().await = None;

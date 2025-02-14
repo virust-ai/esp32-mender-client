@@ -8,7 +8,7 @@ description = "Mender client library for esp32"
 repository = "https://github.com/virust-ai/esp32-mender-client"
 
 [dependencies]
-embassy-executor    = { version = "0.7.0", features = ["task-arena-size-131072"] }
+embassy-executor    = "0.7.0"
 embassy-net = { version = "0.6.0", features = [ "tcp", "udp", "dhcpv4", "medium-ethernet", "dns"] }
 embassy-time        = "0.4.0"
 embassy-sync        = "0.6.1"

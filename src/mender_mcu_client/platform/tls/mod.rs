@@ -1,1 +1,1 @@
-pub mod mender_tls;
+pub(crate) mod mender_tls;

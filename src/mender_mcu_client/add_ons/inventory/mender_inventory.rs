@@ -1,3 +1,5 @@
+use super::mender_inventory_api;
+use crate::custom::mender_config::CONFIG_MENDER_CLIENT_INVENTORY_REFRESH_INTERVAL;
 use crate::mender_mcu_client::add_ons::mender_addon::MenderAddonInstance;
 use crate::mender_mcu_client::core::mender_client;
 use crate::mender_mcu_client::core::mender_utils::{KeyStore, MenderResult, MenderStatus};
@@ -9,10 +11,6 @@ use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::boxed::Box;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
-
-use super::mender_inventory_api;
-
-const CONFIG_MENDER_CLIENT_INVENTORY_REFRESH_INTERVAL: u32 = 28800;
 
 pub struct MenderInventoryConfig {
     pub refresh_interval: u32,

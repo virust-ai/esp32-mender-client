@@ -24,7 +24,6 @@ use core::pin::Pin;
 use embassy_net::Stack;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
-use heapless::String as HString;
 use serde::{Deserialize, Serialize};
 
 #[allow(unused_imports)]
@@ -100,7 +99,7 @@ pub async fn mender_api_init(
 }
 
 // Helper function to get config reference
-pub async fn get_config() -> MenderResult<MenderApiConfig> {
+async fn get_config() -> MenderResult<MenderApiConfig> {
     let conf = MENDER_API_CONFIG.lock().await;
     conf.as_ref()
         .ok_or(MenderStatus::Other)
@@ -138,7 +137,6 @@ fn mender_api_print_response_error(response: Option<&str>, status: i32) {
     }
 }
 
-#[allow(dead_code)]
 pub async fn mender_api_exit() {
     let mut conf = MENDER_API_CONFIG.lock().await;
     *conf = None;
@@ -191,8 +189,7 @@ pub async fn mender_api_perform_authentication() -> MenderResult<()> {
             MenderStatus::Failed
         })?;
 
-    // log_info!("json_identity", "json_identity" => json_identity);
-    // log_info!("public_key_pem", "public_key_pem" => public_key_pem);
+    log_info!("json_identity: {}", json_identity);
 
     let (identity, _): (Identity, _) =
         serde_json_core::from_str(json_identity.as_str()).map_err(|_| {
@@ -331,20 +328,12 @@ pub async fn mender_api_check_for_deployment() -> MenderResult<(String, String, 
     let (_, jwt) = mender_api_get_authentication_token().await?;
 
     // Construct the query path with parameters
-    let mut path = HString::<256>::new();
-    path.push_str(MENDER_API_PATH_GET_NEXT_DEPLOYMENT)
-        .map_err(|_| {
-            log_error!("Failed to construct path");
-            MenderStatus::Failed
-        })?;
-    path.push_str("?artifact_name=")
-        .map_err(|_| MenderStatus::Failed)?;
-    path.push_str(&config.artifact_name)
-        .map_err(|_| MenderStatus::Failed)?;
-    path.push_str("&device_type=")
-        .map_err(|_| MenderStatus::Failed)?;
-    path.push_str(&config.device_type)
-        .map_err(|_| MenderStatus::Failed)?;
+    let mut path = String::new();
+    path.push_str(MENDER_API_PATH_GET_NEXT_DEPLOYMENT);
+    path.push_str("?artifact_name=");
+    path.push_str(&config.artifact_name);
+    path.push_str("&device_type=");
+    path.push_str(&config.device_type);
 
     // Prepare response data structure
     let my_text_callback = MyTextCallback;
@@ -458,31 +447,21 @@ pub async fn mender_api_publish_deployment_status(
     // Convert deployment status to string
     let status_str = deployment_status.as_str();
 
-    // Create payload using heapless types
-    let mut payload = heapless::FnvIndexMap::<HString<32>, HString<32>, 2>::new();
+    // Create a simple struct for serialization
+    #[derive(serde::Serialize)]
+    struct DeploymentStatus<'a> {
+        status: &'a str,
+    }
 
-    let mut status_key: HString<32> = HString::new();
-    status_key.push_str("status").map_err(|_| {
-        log_error!("Failed to create status key");
-        MenderStatus::Failed
-    })?;
+    // Create the payload
+    let payload = DeploymentStatus { status: status_str };
 
-    let mut status_value: HString<32> = HString::new();
-    status_value.push_str(status_str).map_err(|_| {
-        log_error!("Failed to create status value");
-        MenderStatus::Failed
-    })?;
-
-    payload.insert(status_key, status_value).map_err(|_| {
-        log_error!("Failed to insert status into payload");
-        MenderStatus::Failed
-    })?;
-
-    // Serialize payload to JSON string
-    let payload_str: HString<128> = serde_json_core::ser::to_string(&payload).map_err(|_| {
-        log_error!("Failed to serialize payload");
-        MenderStatus::Failed
-    })?;
+    //Serialize payload to JSON string
+    let payload_str: heapless::String<128> =
+        serde_json_core::ser::to_string(&payload).map_err(|_| {
+            log_error!("Failed to serialize payload");
+            MenderStatus::Failed
+        })?;
 
     // Compute path using the helper function
     let path = get_deployment_status_path(id);
@@ -577,7 +556,7 @@ pub async fn mender_api_download_artifact(
 }
 
 // You'll also need this helper callback function
-pub async fn mender_api_http_artifact_callback(
+async fn mender_api_http_artifact_callback(
     event: HttpClientEvent,
     data: Option<&[u8]>,
     _response_data: Option<&mut MenderHttpResponseData>,
