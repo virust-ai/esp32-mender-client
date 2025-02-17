@@ -62,9 +62,17 @@ MENDER_CLIENT_TENANT_TOKEN (optional)
 
 
 2. **Compile and build the project**
+   
+Try on esp32c3
   ```bash
-  cargo build
-  cargo run
+cd examples/esp32c3
+cargo run --release
+```
+
+Try on esp32c6
+  ```bash
+cd examples/esp32c6
+cargo run --release
 ```
 
 # Further Discussioin on Discord
