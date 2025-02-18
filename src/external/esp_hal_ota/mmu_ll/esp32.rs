@@ -14,7 +14,7 @@ const SOC_DROM0_CACHE_ADDRESS_HIGH: u32 = 0x3F800000;
 const DPORT_PRO_FLASH_MMU_TABLE: u32 = 0x3FF10000;
 
 pub fn mmu_ll_get_page_size(_mmu_id: u32) -> u32 {
-    crate::mmu_hal::MMU_PAGE_64KB
+    super::super::mmu_hal::MMU_PAGE_64KB
 }
 
 pub fn mmu_ll_get_entry_id(_mmu_id: u32, vaddr: u32) -> u32 {

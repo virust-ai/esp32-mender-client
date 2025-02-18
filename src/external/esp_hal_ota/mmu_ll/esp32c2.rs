@@ -1,4 +1,4 @@
-use crate::mmu_hal::{MMU_PAGE_16KB, MMU_PAGE_32KB, MMU_PAGE_64KB};
+use super::super::mmu_hal::{MMU_PAGE_16KB, MMU_PAGE_32KB, MMU_PAGE_64KB};
 
 const DR_REG_MMU_TABLE: u32 = 0x600c5000;
 const SOC_MMU_VALID_VAL_MASK: u32 = 0x3f;
