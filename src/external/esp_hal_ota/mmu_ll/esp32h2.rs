@@ -1,4 +1,4 @@
-use crate::mmu_hal::{MMU_PAGE_16KB, MMU_PAGE_32KB, MMU_PAGE_64KB, MMU_PAGE_8KB};
+use super::super::mmu_hal::{MMU_PAGE_16KB, MMU_PAGE_32KB, MMU_PAGE_64KB, MMU_PAGE_8KB};
 
 const SOC_MMU_ENTRY_NUM: u32 = 256;
 const SOC_MMU_VALID_VAL_MASK: u32 = 0x1ff;
