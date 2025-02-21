@@ -359,7 +359,7 @@ async fn try_http_request<'a>(
 
     log_debug!("url: {}", url);
 
-    let mut read_record_buffer = [0u8; 1024 * 5];
+    let mut read_record_buffer = [0u8; 16640];
     let mut write_record_buffer = [0u8; 1024];
     let mut rx_buf = [0; 1024];
     let mut tx_buf = [0; 1024];
