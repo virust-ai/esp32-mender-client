@@ -1,13 +1,13 @@
 extern crate alloc;
 
 use crate::alloc::string::ToString;
-use crate::custom::mender_common::MenderCallback;
 use crate::mender_mcu_client::core::mender_artifact;
 use crate::mender_mcu_client::core::mender_artifact::MenderArtifactContext;
 use crate::mender_mcu_client::core::mender_utils;
 use crate::mender_mcu_client::core::mender_utils::{
     DeploymentStatus, KeyStore, MenderResult, MenderStatus,
 };
+use crate::mender_mcu_client::mender_common::MenderCallback;
 use crate::mender_mcu_client::platform::net::mender_http::{
     self, HttpClientEvent, MenderHttpResponseData,
 };

@@ -39,11 +39,13 @@ print("[INFO] Checking Cargo.toml file...")
 PACKAGE_NAME = extract_value_from_toml(CARGO_TOML, "name")
 print(f"[INFO] Extracted package name: {PACKAGE_NAME}")
 
-# Extract device name and version from .cargo/config.toml
+# Extract device type, name, and version from .cargo/config.toml
 print("[INFO] Checking .cargo/config.toml file...")
+DEVICE_TYPE = extract_value_from_toml(CONFIG_TOML, "ESP_DEVICE_TYPE")
 DEVICE_NAME = extract_value_from_toml(CONFIG_TOML, "ESP_DEVICE_NAME")
 DEVICE_VERSION = extract_value_from_toml(CONFIG_TOML, "ESP_DEVICE_VERSION")
 
+print(f"[INFO] Extracted ESP_DEVICE_TYPE: {DEVICE_TYPE}")
 print(f"[INFO] Extracted ESP_DEVICE_NAME: {DEVICE_NAME}")
 print(f"[INFO] Extracted ESP_DEVICE_VERSION: {DEVICE_VERSION}")
 
@@ -67,3 +69,23 @@ try:
 except subprocess.CalledProcessError as e:
     print(f"[ERROR] Failed to execute espflash command: {e}")
     sys.exit(1)
+
+# Create generate_mender_file.sh script
+MENDER_SCRIPT = "generate_mender_file.sh"
+mender_content = f"""#!/bin/bash
+
+mender-artifact write rootfs-image --compression none --device-type {DEVICE_TYPE} --artifact-name {DEVICE_NAME}-{DEVICE_VERSION} --output-path {DEVICE_NAME}-{DEVICE_VERSION}.mender --file {FIRMWARE_FILE}
+"""
+
+with open(MENDER_SCRIPT, "w", encoding="utf-8") as script_file:
+    script_file.write(mender_content)
+
+# Make the script executable
+os.chmod(MENDER_SCRIPT, 0o755)
+
+print(f"[INFO] {MENDER_SCRIPT} script created successfully.")
+
+# Print the generated command
+mender_cmd = f"mender-artifact write rootfs-image --compression none --device-type {DEVICE_TYPE} --artifact-name {DEVICE_NAME}-{DEVICE_VERSION} --output-path {DEVICE_NAME}-{DEVICE_VERSION}.mender --file {FIRMWARE_FILE}"
+print("[INFO] Run command to generate mender file:")
+print(mender_cmd)

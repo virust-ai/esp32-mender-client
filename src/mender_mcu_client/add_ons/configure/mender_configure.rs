@@ -81,9 +81,7 @@ pub async fn mender_configure_init(
         mender_configure_work,
         conf.as_ref().unwrap().refresh_interval,
         "mender_configure",
-    )
-    .await
-    {
+    ) {
         Ok(handle) => {
             *work_handle = Some(handle);
             Ok((MenderStatus::Ok, ()))

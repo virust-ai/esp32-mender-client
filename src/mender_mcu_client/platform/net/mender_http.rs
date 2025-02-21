@@ -1,8 +1,8 @@
 extern crate alloc;
-use crate::custom::mender_common::MenderCallback;
 use crate::custom::mender_config::ROOT_CERT;
 use crate::mender_mcu_client::core::mender_client::MENDER_CLIENT_RNG;
 use crate::mender_mcu_client::core::mender_utils::{MenderResult, MenderStatus};
+use crate::mender_mcu_client::mender_common::MenderCallback;
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::boxed::Box;
@@ -11,7 +11,6 @@ use alloc::string::{String, ToString};
 use core::fmt;
 use core::future::Future;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicBool, Ordering};
 use embassy_net::{dns::DnsQueryType, tcp::TcpSocket, IpAddress, Stack};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
@@ -19,9 +18,8 @@ use embedded_io_async::Write;
 use embedded_tls::{
     Aes128GcmSha256, TlsConfig, TlsConnection, TlsContext, TlsError, UnsecureProvider,
 };
-use heapless::FnvIndexMap;
 
-const HTTP_RECV_BUF_LENGTH: usize = 1024 + 512;
+const HTTP_RECV_BUF_LENGTH: usize = 4096;
 const HTTP_DEFAULT_PORT: u16 = 80;
 const HTTPS_DEFAULT_PORT: u16 = 443;
 
@@ -40,39 +38,6 @@ unsafe impl Send for SendSyncStack {}
 unsafe impl Sync for SendSyncStack {}
 
 static MENDER_HTTP_STACK: Mutex<CriticalSectionRawMutex, Option<SendSyncStack>> = Mutex::new(None);
-
-// Store connection info instead of the actual connection
-struct CachedConnInfo {
-    addr: IpAddress,
-    is_alive: AtomicBool,
-}
-
-// Update the cache to store connection info
-static DNS_PORT_CACHE: Mutex<CriticalSectionRawMutex, FnvIndexMap<String, CachedConnInfo, 2>> =
-    Mutex::new(FnvIndexMap::new());
-
-// Update functions to work with connection info
-async fn cache_conn_info(host: String, addr: IpAddress) {
-    let mut cache = DNS_PORT_CACHE.lock().await;
-    let _ = cache.insert(
-        host,
-        CachedConnInfo {
-            addr,
-            is_alive: AtomicBool::new(true),
-        },
-    );
-}
-
-async fn get_cached_conn_info(host: &str) -> Option<IpAddress> {
-    let cache = DNS_PORT_CACHE.lock().await;
-    cache.get(host).and_then(|conn| {
-        if conn.is_alive.load(Ordering::Relaxed) {
-            Some(conn.addr)
-        } else {
-            None
-        }
-    })
-}
 
 // Response data struct to collect response text
 #[derive(Default)]
@@ -130,7 +95,7 @@ async fn try_dns_query(stack: &Stack<'static>, host: &str) -> Result<IpAddress, 
         {
             Ok(Ok(addrs)) => {
                 if let Some(&addr) = addrs.first() {
-                    log_info!("DNS query successful, host: {}, addr: {}", host, addr);
+                    log_debug!("DNS query successful, host: {}, addr: {}", host, addr);
                     return Ok(addr);
                 }
             }
@@ -179,17 +144,8 @@ pub async fn connect_to_host<'a>(
         return Err(MenderStatus::Other);
     }
 
-    let addr = if let Some(cached_addr) = get_cached_conn_info(host).await {
-        log_debug!("Using cached connection info, host: {}", host);
-        cached_addr
-    } else {
-        log_info!("Starting DNS query for host: {}", host);
-        let resolved_addr = try_dns_query(&stack, host).await?;
-        cache_conn_info(host.to_string(), resolved_addr).await;
-        resolved_addr
-    };
-
-    log_info!("DNS lookup successful, addr: {}", addr);
+    let addr = try_dns_query(&stack, host).await?;
+    //log_info!("DNS lookup successful, addr: {}", addr);
 
     // Create a new socket using the inner Stack reference
     let mut socket = TcpSocket::new(stack, rx_buf, tx_buf);
@@ -403,10 +359,10 @@ async fn try_http_request<'a>(
 
     log_debug!("url: {}", url);
 
-    let mut read_record_buffer = [0u8; 16640];
-    let mut write_record_buffer = [0u8; HTTP_RECV_BUF_LENGTH];
-    let mut rx_buf = [0; HTTP_RECV_BUF_LENGTH];
-    let mut tx_buf = [0; HTTP_RECV_BUF_LENGTH];
+    let mut read_record_buffer = [0u8; 1024 * 5];
+    let mut write_record_buffer = [0u8; 1024];
+    let mut rx_buf = [0; 1024];
+    let mut tx_buf = [0; 1024];
 
     let mut retry_count = 0;
     const MAX_RETRIES: u32 = 3;
@@ -577,7 +533,7 @@ async fn try_http_request<'a>(
                                             let available = n - current_pos;
                                             let to_read = remaining.min(available);
 
-                                            log_debug!("Continuing partial chunk, remaining: {}, available: {}, to_read: {}", remaining, available, to_read);
+                                            log_info!("Continuing partial chunk, remaining: {}, available: {}, to_read: {}", remaining, available, to_read);
 
                                             callback
                                                 .call(
@@ -604,14 +560,14 @@ async fn try_http_request<'a>(
                                         } else if let Some((chunk_size, header_len)) =
                                             parse_chunk_size(&buffer[current_pos..n])
                                         {
-                                            log_debug!(
+                                            log_info!(
                                                 "Chunk info, size: {}, header_len: {}",
                                                 chunk_size,
                                                 header_len
                                             );
                                             if chunk_size == 0 {
                                                 // Last chunk received
-                                                log_debug!("Last chunk received");
+                                                log_info!("Last chunk received");
                                                 return Ok(());
                                             }
                                             current_pos += header_len;
@@ -619,7 +575,7 @@ async fn try_http_request<'a>(
 
                                             if available >= chunk_size {
                                                 // Full chunk available
-                                                log_debug!(
+                                                log_info!(
                                                     "Processing full chunk, size: {}",
                                                     chunk_size
                                                 );
@@ -637,7 +593,7 @@ async fn try_http_request<'a>(
                                                 current_pos += chunk_size + 2; // Skip chunk data and \r\n
                                             } else {
                                                 // Partial chunk
-                                                log_debug!("Starting partial chunk, size: {}, available: {}", chunk_size, available);
+                                                log_info!("Starting partial chunk, size: {}, available: {}", chunk_size, available);
 
                                                 callback
                                                     .call(
@@ -716,7 +672,7 @@ async fn try_http_request<'a>(
                             break 'retry_loop;
                         }
                     } else {
-                        log_error!("Processing data chunk in a loop, length: {}", n);
+                        log_info!("Processing data chunk in a loop, length: {}", n);
                         // Similar changes for the subsequent reads after headers
                         let mut current_pos = 0;
                         while current_pos < n {
@@ -726,7 +682,7 @@ async fn try_http_request<'a>(
                                 let available = n - current_pos;
                                 let to_read = remaining.min(available);
 
-                                log_debug!("Continuing partial chunk, remaining: {}, available: {}, to_read: {}", remaining, available, to_read);
+                                log_info!("Continuing partial chunk, remaining: {}, available: {}, to_read: {}", remaining, available, to_read);
 
                                 callback
                                     .call(
@@ -751,7 +707,7 @@ async fn try_http_request<'a>(
                             } else if let Some((chunk_size, header_len)) =
                                 parse_chunk_size(&buffer[current_pos..n])
                             {
-                                log_debug!(
+                                log_info!(
                                     "Processing chunk, size: {}, header_len: {}",
                                     chunk_size,
                                     header_len
@@ -759,13 +715,13 @@ async fn try_http_request<'a>(
                                 if chunk_size == 0 {
                                     let _ = tls_conn.close().await;
                                     // Last chunk received
-                                    log_debug!("Last chunk received");
+                                    log_info!("Last chunk received");
                                     break 'retry_loop;
                                 }
                                 current_pos += header_len;
                                 let chunk_end = current_pos + chunk_size;
                                 if chunk_end <= n {
-                                    log_debug!(
+                                    log_info!(
                                         "Processing chunk data, size: {}, data: {}",
                                         chunk_size,
                                         core::str::from_utf8(&buffer[current_pos..chunk_end])
@@ -783,7 +739,7 @@ async fn try_http_request<'a>(
                                     current_pos = chunk_end + 2; // Skip the trailing \r\n
                                 } else {
                                     // Partial chunk received, need more data
-                                    log_debug!(
+                                    log_info!(
                                         "Partial chunk, available: {}, needed: {}",
                                         n - current_pos,
                                         chunk_size

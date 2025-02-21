@@ -63,9 +63,7 @@ pub async fn mender_inventory_init(
         mender_inventory_work,
         conf.as_ref().unwrap().refresh_interval,
         "mender_inventory",
-    )
-    .await
-    {
+    ) {
         Ok(handle) => {
             *work_handle = Some(handle);
             Ok((MenderStatus::Ok, ()))

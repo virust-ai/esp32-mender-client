@@ -2,7 +2,6 @@
 #![no_main]
 
 extern crate alloc;
-use alloc::boxed::Box;
 use alloc::format;
 use embassy_executor::Spawner;
 use embassy_net::Runner;
@@ -39,10 +38,7 @@ use esp32_mender_client::mender_mcu_client::core::mender_utils::{
 use esp32_mender_client::mender_mcu_client::{
     add_ons::inventory::mender_inventory,
     core::mender_client,
-    platform::scheduler::mender_scheduler::{
-        mender_scheduler_work_activate, mender_scheduler_work_create,
-        mender_scheduler_work_set_period, MenderFuture,
-    },
+    platform::scheduler::mender_scheduler::work_queue_task,
 };
 #[allow(unused_imports)]
 use esp32_mender_client::{log_debug, log_error, log_info, log_warn};
@@ -111,20 +107,6 @@ fn restart_cb() -> MenderResult<()> {
     esp_hal::reset::software_reset();
 
     Ok((MenderStatus::Ok, ()))
-}
-
-fn mender_client_work_test() -> MenderFuture {
-    Box::pin(async {
-        match my_work_function().await {
-            MenderStatus::Done => Ok(()),
-            _ => Err("Work failed"),
-        }
-    })
-}
-
-async fn my_work_function() -> MenderStatus {
-    println!("Doing some work...");
-    MenderStatus::Done
 }
 
 // Make the config static
@@ -206,6 +188,8 @@ async fn main(spawner: Spawner) -> ! {
         .spawn(connection(controller))
         .expect("connection spawn");
     spawner.spawn(net_task(runner)).expect("net task spawn");
+    spawner.spawn(work_queue_task()).expect("work queue task spawn");
+    spawner.spawn(test_task()).expect("test task spawn");
 
     loop {
         if stack.is_link_up() {
@@ -268,7 +252,7 @@ async fn main(spawner: Spawner) -> ! {
         restart_cb,
     );
 
-    mender_client_init(&spawner, &config, &callbacks, trng, stack)
+    mender_client_init(&config, &callbacks, trng, stack)
         .await
         .expect("Failed to init mender client");
 
@@ -288,31 +272,6 @@ async fn main(spawner: Spawner) -> ! {
             panic!("Failed to register mender-inventory add-on");
         }
     }
-
-    // Create a work
-    let mut work = mender_scheduler_work_create(mender_client_work_test, 5, "my_work")
-        .await
-        .expect("Failed to create work");
-
-    // let mut work2 = mender_scheduler_work_create(mender_client_work_test, 5, "my_work2")
-    //     .await
-    //     .expect("Failed to create work");
-
-    // Change period if needed
-    mender_scheduler_work_set_period(&mut work, 10)
-        .await
-        .expect("Failed to set period");
-    // mender_scheduler_work_set_period(&mut work2, 2)
-    //     .await
-    //     .expect("Failed to set period");
-
-    // Activate the work
-    mender_scheduler_work_activate(&mut work)
-        .await
-        .expect("Failed to activate work");
-    // mender_scheduler_work_activate(&mut work2)
-    //     .await
-    //     .expect("Failed to activate work");
 
     // Define the inventory items
     let inventory = [
@@ -407,4 +366,12 @@ async fn connection(
 #[embassy_executor::task]
 async fn net_task(mut runner: Runner<'static, WifiDevice<'static, WifiStaDevice>>) {
     runner.run().await
+}
+
+#[embassy_executor::task]
+async fn test_task() {
+    loop {
+        log_info!("test_task");
+        Timer::after(Duration::from_secs(2)).await;
+    }
 }

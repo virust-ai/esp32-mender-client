@@ -1,11 +1,11 @@
-use crate::{
-    custom::mender_common::{MenderCallback, MenderCallbackInfo},
-    mender_mcu_client::core::mender_utils::{self, MenderResult, MenderStatus},
-};
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
+use crate::{
+    mender_mcu_client::core::mender_utils::{self, MenderResult, MenderStatus},
+    mender_mcu_client::mender_common::{MenderCallback, MenderCallbackInfo},
+};
 
-use crate::custom::mender_common::{serde_bytes_str, serde_bytes_str_vec};
+use crate::mender_mcu_client::mender_common::{serde_bytes_str, serde_bytes_str_vec};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -169,7 +169,10 @@ pub async fn mender_artifact_process_data(
     input_length: usize,
     callback: Option<&(dyn MenderCallback + Send + Sync)>,
 ) -> MenderResult<()> {
-    log_info!("mender_artifact_process_data");
+    log_info!(
+        "mender_artifact_process_data input_length: {}",
+        input_length
+    );
     // Copy data to the end of the internal buffer
     if let Some(data) = input_data {
         if input_length > 0 {
