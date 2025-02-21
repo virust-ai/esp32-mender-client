@@ -2,13 +2,17 @@
 runner = "espflash flash --monitor -T ./partitions.csv --erase-parts otadata"
 
 [env]
-ESP_LOG="INFO"
+ESP_DEVICE_TYPE="esp32s3"
+ESP_DEVICE_NAME="esp32s3-example"
+ESP_DEVICE_VERSION="0.1.1"
+
 ESP_WIFI_CONFIG_PHY_ENABLE_USB = "false"
 MENDER_CLIENT_WIFI_SSID="Your SSID"
 MENDER_CLIENT_WIFI_PSK="Your Passw"
 MENDER_CLIENT_URL="https://hosted.mender.io"
 MENDER_CLIENT_TENANT_TOKEN="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJtZW5kZXIudGVuYW50IjoiNjVkODMyYjNkY2I2ODI1YmQ2OWJjZGRmIiwiaXNzIjoiTWVuZGVyIiwic3ViIjoiNjVkODMyYjNkY2I2ODI1YmQ2OWJjZGRmIn0.oPgY1QLpvMlNJzc9_ZVbrNlWpAvqtZXXHWilw6kVZD-0HZQNZGt4nXbvOFrekfbgU7zHfK9N6ovqWffa7MjqFjceEfbpagYASchFcuqRZPBGTc5MBUmF0YZWzvaw0pBYLK5sakUiEVoAvQJsSdy75NcipTlHneaB96y5WoPBdP7fkdRb0UIWBIHi4O5ZFwDYgaP5SJBj9i-akoIvqnTsZjGfATUuqpNIErnE4yPwn0Rf2CgIdrgl2daTZAwFB0lbHC_Xm2IT5LjbODdTvtnJyVfYoIpU0Bn34YoCl538sPbzIsyArIit8D3uQ8aeviUiyXt857dSbSBE6wHV0gsJMxjBQZApFaYIH4FEk7g2PEV5Q3Fo0-TcL6BXrE10u3DDOMZbspLrqozq_eVfWth6aa_5fNlKIoZeesuwd4QJlviwUSRnCBdN2W-Elu8bhKSfRRmLPX5RL6g_BMyrM-wvcV96kFobZy52IZuMIjAex3I3p7gCu4IxWGB1KrxnmJPi"
 
+ESP_LOG="INFO"
 [build]
 rustflags = [
   "-C", "link-arg=-nostartfiles",

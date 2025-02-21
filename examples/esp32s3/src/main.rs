@@ -243,15 +243,21 @@ async fn main(spawner: Spawner) -> ! {
         store
     };
 
+    let device_type = env!("ESP_DEVICE_TYPE");
+    let device_name = env!("ESP_DEVICE_NAME");
+    let device_version = env!("ESP_DEVICE_VERSION");
     let tenant_token = option_env!("MENDER_CLIENT_TENANT_TOKEN");
     let config = MenderClientConfig::new(
         identity,
-        "artifact-1.0",
-        "esp32c3",
+        &format!("{}-{}", device_name, device_version),
+        device_type,
         option_env!("MENDER_CLIENT_URL").unwrap_or("https://hosted.mender.io"),
         tenant_token,
     )
-    .with_recommissioning(false);
+    .with_auth_interval(60)
+    .with_update_interval(120)
+    .with_recommissioning(false)
+    .with_device_update_done_reset(true);
 
     // Creating an instance:
     let callbacks = MenderClientCallbacks::new(
