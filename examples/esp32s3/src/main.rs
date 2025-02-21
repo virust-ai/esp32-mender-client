@@ -21,11 +21,10 @@ use esp_wifi::{
     },
     EspWifiController,
 };
-
+use alloc::string::ToString;
 use esp32_mender_client::external::esp_hal_ota::OtaImgState;
 use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_confirm_image;
 use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_is_image_confirmed;
-use heapless::String as HString;
 
 use esp32_mender_client::external::esp_hal_ota::Ota;
 use esp32_mender_client::mender_mcu_client::add_ons::inventory::mender_inventory::{
@@ -141,7 +140,7 @@ async fn main(spawner: Spawner) -> ! {
         config.cpu_clock = CpuClock::max();
         config
     });
-    esp_alloc::heap_allocator!(100 * 1024);
+    esp_alloc::heap_allocator!(120 * 1024);
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     let timg1 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timg1.timer0);
@@ -158,7 +157,7 @@ async fn main(spawner: Spawner) -> ! {
     let config = embassy_net::Config::dhcpv4(Default::default());
 
     let seed = (trng.rng.random() as u64) << 32 | trng.rng.random() as u64;
-    println!("Test version 1.0");
+    println!("Test {}-{}", env!("ESP_DEVICE_NAME"), env!("ESP_DEVICE_VERSION"));
     // // Init network stack
     // let stack = &*mk_static!(
     //     Stack<WifiDevice<'_, WifiStaDevice>>,
@@ -318,16 +317,16 @@ async fn main(spawner: Spawner) -> ! {
     // Define the inventory items
     let inventory = [
         KeyStoreItem {
-            name: HString::<32>::try_from("mender-mcu-client").unwrap(),
-            value: HString::<32>::try_from(env!("CARGO_PKG_VERSION")).unwrap(),
+            name: "mender-mcu-client".to_string(),
+            value: env!("CARGO_PKG_VERSION").to_string(),
         },
         KeyStoreItem {
-            name: HString::<32>::try_from("latitude").unwrap(),
-            value: HString::<32>::try_from("45.8325").unwrap(),
+            name: "latitude".to_string(),
+            value: "45.8325".to_string(),
         },
         KeyStoreItem {
-            name: HString::<32>::try_from("longitude").unwrap(),
-            value: HString::<32>::try_from("6.864722").unwrap(),
+            name: "longitude".to_string(),
+            value: "6.864722".to_string(),
         },
     ];
 
@@ -363,10 +362,6 @@ async fn connection(
     //stack: &'static Stack<WifiDevice<'static, WifiStaDevice>>,
 ) {
     log_info!("start connection task");
-    log_info!("turn off power saving mode");
-    controller
-        .set_power_saving(esp_wifi::config::PowerSaveMode::None)
-        .unwrap();
     loop {
         if esp_wifi::wifi::wifi_state() == WifiState::StaConnected {
             // wait until we're no longer connected
