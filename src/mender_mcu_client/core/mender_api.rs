@@ -248,7 +248,7 @@ pub async fn mender_api_perform_authentication() -> MenderResult<()> {
 
     // Handle response
     if status == 200 {
-        if response_data.text.as_ref().map_or(true, |t| t.is_empty()) {
+        if response_data.text.as_ref().is_none_or(|t| t.is_empty()) {
             log_error!("Response is empty");
             return Err(MenderStatus::Failed);
         }

@@ -1,0 +1,62 @@
+[package]
+name = "esp32-mender-client-example-esp32s3"
+version = "0.1.0"
+authors = ["virust-ai"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+esp-backtrace = { version = "0.15.0", features = [
+    "esp32s3",
+    "exception-handler",
+    "panic-handler",
+    "println",
+] }
+esp-hal = { version = "0.23.1", features = [ "esp32s3" ] }
+esp-println = { version = "0.13.0", features = ["esp32s3", "log"] }
+esp-hal-embassy     = { version = "0.6.0", features = ["esp32s3"] }
+embassy-executor    = { version = "0.7.0", features = ["task-arena-size-32768"] }
+embassy-net = { version = "0.6.0", features = [ "tcp", "udp", "dhcpv4", "medium-ethernet", "dns"] }
+embassy-time = { version = "0.4.0", default-features = false }
+static_cell         = { version = "2.1.0", features = ["nightly"] }
+log = { version = "0.4.22" }
+esp-alloc = { version = "0.6.0" }
+embedded-io = "0.6.1"
+esp-wifi = { version = "0.12.0", features = [
+    "esp32s3",
+    "utils",
+    "wifi",
+] }
+heapless = { version = "0.8.0", default-features = false }
+esp-storage = { version = "0.4.0" , features = [ "esp32s3" ] }
+embedded-storage = "0.3.1"
+spin = {version = "0.9.8", default-features = false, features = ["once", "portable_atomic"]}
+
+esp32-mender-client = { path = "../..", features = ["esp32s3"] }
+
+[profile.dev]
+# Rust debug is too slow.
+# For debug builds always builds with some optimization
+opt-level = "s"
+#opt-level = 1  # Less aggressive optimization than "s"
+#debug = true
+#debug-assertions = true
+
+[profile.release]
+codegen-units = 16
+debug = 2
+debug-assertions = false
+incremental = false
+lto = 'fat'
+opt-level = 's'
+overflow-checks = false
+panic = "abort"
+
+[features]
+default = ["mender_client_configure_storage"]
+
+# Configure storage feature
+mender_client_configure_storage = []
+
+# You can also create feature groups
+full = ["mender_client_configure_storage"]
