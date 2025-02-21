@@ -75,6 +75,12 @@ cd examples/esp32c6
 cargo run --release
 ```
 
+Try on esp32s3
+  ```bash
+cd examples/esp32s3
+cargo run --release
+```
+
 # Further Discussioin on Discord
 Please join us : https://discord.gg/b7vk6fza
 
