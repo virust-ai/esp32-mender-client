@@ -7,14 +7,12 @@ use crate::mender_mcu_client::core::mender_utils::{
     DeploymentStatus, KeyStore, MenderResult, MenderStatus,
 };
 use crate::mender_mcu_client::platform::scheduler::mender_scheduler::{
-    mender_scheduler_init, mender_scheduler_work_activate, mender_scheduler_work_create,
-    mender_scheduler_work_deactivate, mender_scheduler_work_delete, MenderFuture,
-    MenderSchedulerWorkContext,
+    mender_scheduler_work_activate, mender_scheduler_work_create, mender_scheduler_work_deactivate,
+    mender_scheduler_work_delete, MenderFuture, MenderSchedulerWorkContext,
 };
 use alloc::boxed::Box;
 use alloc::string::String;
 use core::pin::Pin;
-use embassy_executor::Spawner;
 use embassy_net::Stack;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
@@ -23,16 +21,18 @@ use heapless::String as HString;
 use serde::{Deserialize, Serialize};
 use serde_json_core::de::from_str;
 
-use crate::custom::mender_common::{MenderArtifactCallback, MenderCallback, MenderCallbackInfo};
+use crate::mender_mcu_client::mender_common::{
+    MenderArtifactCallback, MenderCallback, MenderCallbackInfo,
+};
 use crate::mender_mcu_client::platform::flash::mender_flash;
 use crate::mender_mcu_client::platform::scheduler::mender_scheduler;
 use crate::mender_mcu_client::platform::storage::mender_storage;
 use crate::mender_mcu_client::platform::tls::mender_tls;
 
-use crate::custom::mender_common::{serde_bytes_str, serde_bytes_str_vec};
 use crate::custom::mender_config::{
     CONFIG_MENDER_AUTH_POLL_INTERVAL, CONFIG_MENDER_UPDATE_POLL_INTERVAL,
 };
+use crate::mender_mcu_client::mender_common::{serde_bytes_str, serde_bytes_str_vec};
 #[allow(unused_imports)]
 use crate::{log_debug, log_error, log_info, log_warn};
 use alloc::vec::Vec;
@@ -233,7 +233,6 @@ impl MenderArtifactCallback for FlashCallback {
 }
 
 pub async fn mender_client_init(
-    spawner: &Spawner,
     config: &MenderClientConfig,
     callbacks: &MenderClientCallbacks,
     trng: &'static mut Trng<'static>,
@@ -296,9 +295,6 @@ pub async fn mender_client_init(
         tenant_token: saved_config.tenant_token.as_ref().map(|s| s.to_string()),
     };
 
-    // Initialize the scheduler
-    mender_scheduler_init(*spawner).expect("Failed to init scheduler");
-
     if (mender_storage::mender_storage_init().await).is_err() {
         log_error!("Unable to initialize storage");
         return Err(MenderStatus::Other);
@@ -333,7 +329,6 @@ pub async fn mender_client_init(
         saved_config.authentication_poll_interval,
         "mender_client_update",
     )
-    .await
     .expect("Failed to create work");
 
     let mut client_work = MENDER_CLIENT_WORK.lock().await;
@@ -617,7 +612,7 @@ async fn mender_client_work_function() -> MenderStatus {
                 "mender_client_work_function: setting work period: {}",
                 period
             );
-            if (mender_scheduler::mender_scheduler_work_set_period(&mut w, period).await).is_err() {
+            if (mender_scheduler::mender_scheduler_work_set_period(&mut w, period)).is_err() {
                 log_error!("Unable to set work period");
                 if let Err(release_err) = mender_client_network_release().await {
                     return release_err;
