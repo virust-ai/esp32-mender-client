@@ -9,32 +9,30 @@ repository = "https://github.com/virust-ai/esp32-mender-client"
 
 [dependencies]
 embassy-executor    = "0.7.0"
-embassy-net = { version = "0.6.0", features = [ "tcp", "udp", "dhcpv4", "medium-ethernet", "dns"] }
+embassy-net = { version = "0.6.0", features = ["dhcpv4", "dns", "tcp", "udp"] }
 embassy-time        = "0.4.0"
 embassy-sync        = "0.6.1"
-static_cell         = { version = "2.1.0", features = ["nightly"] }
 log = { version = "0.4.22" }
-esp-alloc = { version = "0.6.0" }
-#embedded-io = "0.6.1"
 heapless = { version = "0.8.0", default-features = false }
 embedded-io-async = "0.6.1"
 serde-json-core = "0.6.0"
 embedded-tls = { git = "https://github.com/drogue-iot/embedded-tls.git", default-features = false }
 rsa = { version = "0.9.7", default-features = false, features = ["sha2"] }
-rand_core = "0.6.4"
-crc = "3.2.1"
 base64 = { version = "0.22.1", default-features = false }
 sha2 = { version = "0.10.8", default-features = false }
-digest = "0.10.7"
 embedded-storage = "0.3.1"
 serde = { version = "1.0.217", default-features = false, features = ["derive"] }
 embedded-websocket = { version = "0.9.4", default-features = false }
-defmt = "0.3.10"
-
+littlefs2 = { version = "0.6.0", default-features = false, features = ["c-stubs"]}
 esp-hal = { version = "0.23.1", optional = true }
 esp-storage = { version = "0.4.0", optional = true }
 
-spin = {version = "0.9.8", default-features = false, features = ["once", "portable_atomic"], optional = true}
+spin = { version = "0.9.8", default-features = false, features = ["once", "portable_atomic"], optional = true}
+
+delog = { version = "=0.1.6", optional = true }  # Force exactly version 0.1.6
+
+[patch.crates-io]
+delog = { version = "0.1.6", git = "https://github.com/LechevSpace/delog.git", rev = "e83f3fd" }
 
 [profile.dev]
 # Rust debug is too slow.
@@ -70,6 +68,7 @@ esp32c3 = [
     "esp-hal/esp32c3",
     "esp-storage/esp32c3",
     "dep:spin",
+    "dep:delog",
 ]
 esp32c6 = [
     "dep:esp-hal",

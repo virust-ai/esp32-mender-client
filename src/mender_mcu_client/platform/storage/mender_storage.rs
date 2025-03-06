@@ -91,6 +91,12 @@ where
             }
         }
 
+        log_info!(
+            "storage partition offset: {} with size: {}",
+            tmp_pinfo.privatekey_offset,
+            tmp_pinfo.flashkey_size
+        );
+
         tmp_pinfo.publickey_offset = tmp_pinfo.privatekey_offset + TLS_PRIVATE_KEY_LENGTH;
         tmp_pinfo.deployment_data_offset = tmp_pinfo.publickey_offset + TLS_PUBLIC_KEY_LENGTH;
         tmp_pinfo.device_config_offset = tmp_pinfo.deployment_data_offset + MAX_DATA_SIZE;

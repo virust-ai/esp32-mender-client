@@ -21,15 +21,12 @@ embassy-time = { version = "0.4.0", default-features = false }
 static_cell         = { version = "2.1.0", features = ["nightly"] }
 log = { version = "0.4.22" }
 esp-alloc = { version = "0.6.0" }
-embedded-io = "0.6.1"
 esp-wifi = { version = "0.12.0", features = [
     "esp32c6",
     "utils",
     "wifi",
 ] }
-heapless = { version = "0.8.0", default-features = false }
 esp-storage = { version = "0.4.0" , features = [ "esp32c6" ] }
-embedded-storage = "0.3.1"
 
 esp32-mender-client = { path = "../..", features = ["esp32c6"] }
 

@@ -2,6 +2,11 @@
 runner = "espflash flash --monitor -T ./partitions.csv --erase-parts otadata"
 
 [env]
+CC = "<your path>\\.espressif\\tools\\xtensa-esp-elf\\esp-13.2.0_20240530\\xtensa-esp-elf\\bin\\xtensa-esp32s3-elf-gcc"
+AR = "<your path>\\.espressif\\tools\\xtensa-esp-elf\\esp-13.2.0_20240530\\xtensa-esp-elf\\bin\\xtensa-esp32s3-elf-ar"
+
+CFLAGS = "-mlongcalls"
+
 ESP_DEVICE_TYPE="esp32s3"
 ESP_DEVICE_NAME="esp32s3-example"
 ESP_DEVICE_VERSION="0.1.1"
