@@ -40,6 +40,9 @@ use esp32_mender_client::mender_mcu_client::{
     core::mender_client,
     platform::scheduler::mender_scheduler::work_queue_task,
 };
+use esp32_mender_client::mender_mcu_client::platform::fs::mender_littlefs::{
+    mender_fs_init, mender_fs_read_file, mender_fs_write_file,
+};
 #[allow(unused_imports)]
 use esp32_mender_client::{log_debug, log_error, log_info, log_warn};
 
@@ -127,6 +130,35 @@ async fn main(spawner: Spawner) -> ! {
     let timg1 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timg1.timer0);
     let trng = &mut *mk_static!(Trng<'static>, Trng::new(peripherals.RNG, peripherals.ADC1));
+
+    // Initialize the Mender filesystem
+    match mender_fs_init().await {
+        Ok(_) => {
+            log_info!("Mender filesystem initialized successfully");
+
+            // Example: Write a file
+            let test_data = b"Hello, ESP32-S3 with Mender LittleFS!";
+            match mender_fs_write_file("test.txt", test_data).await {
+                Ok(_) => {
+                    log_info!("File written successfully");
+
+                    // Example: Read the file back
+                    match mender_fs_read_file("test.txt").await {
+                        Ok((_, data_vec)) => {
+                            if let Ok(content) = core::str::from_utf8(&data_vec) {
+                                log_info!("Read from file: {}", content);
+                            }
+                        }
+                        Err(e) => log_error!("Failed to read file: {:?}", e),
+                    }
+                }
+                Err(e) => log_error!("Failed to write file: {:?}", e),
+            }
+        }
+        Err(e) => {
+            log_error!("Failed to initialize Mender filesystem: {:?}", e);
+        }
+    }
 
     let init = &*mk_static!(
         EspWifiController<'static>,

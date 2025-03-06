@@ -4,5 +4,6 @@ otadata,  data, ota,     0xd000,   0x2000,
 phy_init, data, phy,     0xf000,   0x1000,
 ota_0,    app,  ota_0,   ,  1728K,
 ota_1,    app,  ota_1,   ,  1728K,
-key_data,    data,  nvs,   0x370000, 0x3000,
+#key_data,    data,  nvs,   0x370000, 0x3000,
+storage,    data,  littlefs,   , 2M,
 

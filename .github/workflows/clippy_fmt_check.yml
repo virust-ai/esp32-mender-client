@@ -30,12 +30,47 @@ jobs:
           sudo apt-get install -y libudev-dev
           sudo apt install pkg-config
           cargo update
+          cargo install espup
+          espup install --targets esp32s3
           export PATH=$(pwd)/aarch64-linux-musl-cross/bin:$PATH
         shell: bash
 
       - name: Rustfmt
         run: cargo fmt --all -- --check
         continue-on-error: false
+
+      - name: Install ESP32 toolchain
+        run: |
+          # TODO: Remove this once and use espup install --targets esp32c6
+          # Create base directory
+          mkdir -p $HOME/.espressif/tools
+
+          # Download latest toolchain
+          cd $HOME/.espressif/tools
+          wget https://github.com/espressif/crosstool-NG/releases/download/esp-14.2.0_20240906/riscv32-esp-elf-14.2.0_20240906-x86_64-linux-gnu.tar.gz
+
+          # Extract toolchain
+          tar -xzf riscv32-esp-elf-14.2.0_20240906-x86_64-linux-gnu.tar.gz
+
+          # Find the bin directory
+          BIN_DIR=$(find $HOME/.espressif/tools -name "riscv32-esp-elf-gcc" -type f | xargs dirname)
+          
+          # Add to PATH      
+          echo "PATH=$BIN_DIR:$PATH" >> $GITHUB_ENV
+
+
+      # Set environment variables for ESP32-C6 toolchain
+      - name: Set ESP toolchain environment variables
+        run: |
+          GCC_PATH=$(find $HOME/.espressif/tools -name "riscv32-esp-elf-gcc" -type f)
+          AR_PATH=$(find $HOME/.espressif/tools -name "riscv32-esp-elf-ar" -type f)
+          
+          echo "CC=$GCC_PATH" >> $GITHUB_ENV
+          echo "AR=$AR_PATH" >> $GITHUB_ENV
+                    
+          # Print paths for debugging
+          echo "Found ESP32-C6 GCC at: $GCC_PATH"
+          echo "Found ESP32-C6 AR at: $AR_PATH"
 
       #- name: Clippy (esp32c2)
       #  run: cargo clippy --target riscv32imc-unknown-none-elf --features esp32c2 -- -D warnings
@@ -61,6 +96,20 @@ jobs:
       #  run: cargo clippy --target xtensa-esp32s2-none-elf --features esp32s2 -- -D warnings
       #  continue-on-error: false    
 
-      #- name: Clippy (esp32s3)
-      #  run: cargo clippy --target xtensa-esp32s3-none-elf --features esp32s3 -- -D warnings
-      #  continue-on-error: false               
+      # Set environment variables for ESP32-S3 toolchain
+      - name: Set ESP toolchain environment variables for esp32s3
+        run: |
+          S3_GCC_PATH=$(find $HOME/.rustup/toolchains/esp -name "xtensa-esp32s3-elf-gcc" -type f)
+          S3_AR_PATH=$(find $HOME/.rustup/toolchains/esp -name "xtensa-esp32s3-elf-ar" -type f)
+
+          echo "CC=$S3_GCC_PATH" >> $GITHUB_ENV
+          echo "AR=$S3_AR_PATH" >> $GITHUB_ENV
+
+          echo "Found ESP32-S3 GCC at: $S3_GCC_PATH"
+          echo "Found ESP32-S3 AR at: $S3_AR_PATH"
+               
+      - name: Clippy (esp32s3)
+        run: |
+          source $HOME/export-esp.sh
+          rustup run esp cargo clippy --target xtensa-esp32s3-none-elf --features esp32s3 -- -D warnings
+        continue-on-error: false               

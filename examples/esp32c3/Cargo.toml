@@ -21,18 +21,17 @@ embassy-time = { version = "0.4.0", default-features = false }
 static_cell         = { version = "2.1.0", features = ["nightly"] }
 log = { version = "0.4.22" }
 esp-alloc = { version = "0.6.0" }
-embedded-io = "0.6.1"
 esp-wifi = { version = "0.12.0", features = [
     "esp32c3",
     "utils",
     "wifi",
 ] }
-heapless = { version = "0.8.0", default-features = false }
 esp-storage = { version = "0.4.0" , features = [ "esp32c3" ] }
-embedded-storage = "0.3.1"
-spin = {version = "0.9.8", default-features = false, features = ["once", "portable_atomic"]}
 
 esp32-mender-client = { path = "../..", features = ["esp32c3"] }
+
+[patch.crates-io]
+delog = { version = "0.1.6", git = "https://github.com/LechevSpace/delog.git", rev = "e83f3fd" }
 
 [profile.dev]
 # Rust debug is too slow.

@@ -3,10 +3,14 @@
 
 extern crate alloc;
 use alloc::format;
+use alloc::string::ToString;
 use embassy_executor::Spawner;
 use embassy_net::Runner;
 use embassy_net::StackResources;
 use embassy_time::{Duration, Timer};
+use esp32_mender_client::external::esp_hal_ota::OtaImgState;
+use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_confirm_image;
+use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_is_image_confirmed;
 use esp_backtrace as _;
 use esp_hal::efuse::Efuse;
 use esp_hal::{clock::CpuClock, rng::Trng, timer::timg::TimerGroup};
@@ -20,10 +24,6 @@ use esp_wifi::{
     },
     EspWifiController,
 };
-use alloc::string::ToString;
-use esp32_mender_client::external::esp_hal_ota::OtaImgState;
-use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_confirm_image;
-use esp32_mender_client::mender_mcu_client::platform::flash::mender_flash::mender_flash_is_image_confirmed;
 
 use esp32_mender_client::external::esp_hal_ota::Ota;
 use esp32_mender_client::mender_mcu_client::add_ons::inventory::mender_inventory::{
@@ -35,9 +35,11 @@ use esp32_mender_client::mender_mcu_client::core::mender_client::{
 use esp32_mender_client::mender_mcu_client::core::mender_utils::{
     DeploymentStatus, KeyStore, KeyStoreItem, MenderResult, MenderStatus,
 };
+use esp32_mender_client::mender_mcu_client::platform::fs::mender_littlefs::{
+    mender_fs_init, mender_fs_read_file, mender_fs_write_file,
+};
 use esp32_mender_client::mender_mcu_client::{
-    add_ons::inventory::mender_inventory,
-    core::mender_client,
+    add_ons::inventory::mender_inventory, core::mender_client,
     platform::scheduler::mender_scheduler::work_queue_task,
 };
 #[allow(unused_imports)]
@@ -128,6 +130,35 @@ async fn main(spawner: Spawner) -> ! {
     esp_hal_embassy::init(timg1.timer0);
     let trng = &mut *mk_static!(Trng<'static>, Trng::new(peripherals.RNG, peripherals.ADC1));
 
+    // Initialize the Mender filesystem
+    match mender_fs_init().await {
+        Ok(_) => {
+            log_info!("Mender filesystem initialized successfully");
+
+            // Example: Write a file
+            let test_data = b"Hello, ESP32-C3 with Mender LittleFS!";
+            match mender_fs_write_file("test.txt", test_data).await {
+                Ok(_) => {
+                    log_info!("File written successfully");
+
+                    // Example: Read the file back
+                    match mender_fs_read_file("test.txt").await {
+                        Ok((_, data_vec)) => {
+                            if let Ok(content) = core::str::from_utf8(&data_vec) {
+                                log_info!("Read from file: {}", content);
+                            }
+                        }
+                        Err(e) => log_error!("Failed to read file: {:?}", e),
+                    }
+                }
+                Err(e) => log_error!("Failed to write file: {:?}", e),
+            }
+        }
+        Err(e) => {
+            log_error!("Failed to initialize Mender filesystem: {:?}", e);
+        }
+    }
+
     let init = &*mk_static!(
         EspWifiController<'static>,
         init(timg0.timer0, trng.rng, peripherals.RADIO_CLK).unwrap()
@@ -139,7 +170,11 @@ async fn main(spawner: Spawner) -> ! {
     let config = embassy_net::Config::dhcpv4(Default::default());
 
     let seed = (trng.rng.random() as u64) << 32 | trng.rng.random() as u64;
-    println!("Test {}-{}", env!("ESP_DEVICE_NAME"), env!("ESP_DEVICE_VERSION"));
+    println!(
+        "Test {}-{}",
+        env!("ESP_DEVICE_NAME"),
+        env!("ESP_DEVICE_VERSION")
+    );
     // // Init network stack
     // let stack = &*mk_static!(
     //     Stack<WifiDevice<'_, WifiStaDevice>>,
@@ -188,7 +223,9 @@ async fn main(spawner: Spawner) -> ! {
         .spawn(connection(controller))
         .expect("connection spawn");
     spawner.spawn(net_task(runner)).expect("net task spawn");
-    spawner.spawn(work_queue_task()).expect("work queue task spawn");
+    spawner
+        .spawn(work_queue_task())
+        .expect("work queue task spawn");
     spawner.spawn(test_task()).expect("test task spawn");
 
     loop {
@@ -279,7 +316,7 @@ async fn main(spawner: Spawner) -> ! {
             name: "mender-mcu-client".to_string(),
             value: env!("CARGO_PKG_VERSION").to_string(),
         },
-        KeyStoreItem {      
+        KeyStoreItem {
             name: "latitude".to_string(),
             value: "45.8325".to_string(),
         },
